@@ -1,0 +1,46 @@
+[project]
+name = "smartmeal-backend"
+version = "0.1.0"
+description = "SmartMeal backend: Django + DRF modular monolith"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django>=5.2,<5.3",            # 5.2 LTS
+    "djangorestframework>=3.16,<4",
+    "drf-spectacular>=0.28,<1",
+    "psycopg[binary]>=3.2,<4",
+    "django-environ>=0.12,<1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<9",
+    "pytest-django>=4.9,<5",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+testpaths = ["apps"]
+# --ds beats the DJANGO_SETTINGS_MODULE env var (Compose sets it to local), so tests always use test settings
+addopts = "-ra --strict-markers --ds=config.settings.test"
+filterwarnings = ["error::DeprecationWarning:apps"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["**/migrations/*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "S", "C4", "SIM", "RUF"]
+ignore = ["RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106"]
+"config/settings/test.py" = ["S105"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config"]

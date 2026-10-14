@@ -1,0 +1,104 @@
+# 06 — Geliştirme Yol Haritası
+
+Süreler tahminidir; ekip boyutu, entegrasyonlar ve operasyonel gereksinimler netleştikçe güncellenmelidir. Her fazın çıkış kriteri geçmeden sonraki faza geçilmemelidir.
+
+## Faz 0 — Kararları ve repo temelini hazırla
+- [x] Git deposu ve monorepo yapısı (yapı oluşturuldu; uzak depo/ilk commit kullanıcıda)
+- [x] Docker Compose (build, up, db healthy ve /health 200 kullanıcı makinesinde doğrulandı)
+- [x] Django custom user modeli
+- [x] PostgreSQL bağlantısı ve migration (PostgreSQL 16'ya karşı doğrulandı)
+- [x] Lint/test/format komutları
+- [~] CI temel akışı (workflow yazıldı; **GitHub Actions'ta henüz çalıştırılmadı**)
+- [x] API schema altyapısı (drf-spectacular, `--validate --fail-on-warn` geçiyor)
+- [x] `.env.example`, gizli bilgi politikası (README)
+
+**Çıkış:** Yeni geliştirici README ile projeyi yerelde çalıştırabilir; testler otomatik çalışır.
+
+## Faz 1 — Katalog ve reçeteler
+- [ ] Ingredient ve Product
+- [ ] Birim ve dönüşüm sözlüğü
+- [ ] RecipeVersion ve RecipeLine
+- [ ] Alerjen bilgisi
+- [ ] Admin temel ekranları
+- [ ] Model ve API testleri
+
+**Çıkış:** Ürün ve reçete sürümü yönetilir; reçete miktarları standart birimlerle hesaplanabilir.
+
+## Faz 2 — Tedarik ve stok
+- [ ] Supplier ve PurchaseOrder
+- [ ] GoodsReceipt
+- [ ] InventoryLot
+- [ ] StockMovement
+- [ ] StockReservation
+- [ ] FEFO aday tahsisi
+- [ ] Kalite blokajı
+- [ ] Eşzamanlılık ve uzlaştırma testleri
+
+**Çıkış:** Mal kabulden kullanılabilir stok hesabına kadar hareketler izlenebilir; stok fazla rezerve edilemez.
+
+## Faz 3 — Sipariş ve müşteri web'i
+- [ ] Order ve OrderLine
+- [ ] Fiyat snapshot'ı
+- [ ] Durum makinesi
+- [ ] Idempotency
+- [ ] Sipariş/iptal ve rezervasyon kuralları
+- [ ] Next.js müşteri web akışı
+- [ ] Kimlik ve erişim testleri
+
+**Çıkış:** Uçtan uca sipariş oluşturma ve güvenli iptal çalışır.
+
+## Faz 4 — Üretim planlama
+- [ ] Sipariş talep özeti
+- [ ] Malzeme ihtiyaç hesaplama
+- [ ] Üretim planı ve partiler
+- [ ] Gerçekleşen miktar/fire
+- [ ] Malzeme lotu tüketim bağlantısı
+
+**Çıkış:** Planlanan ihtiyaç, kullanılan lot ve gerçekleşen üretim karşılaştırılabilir.
+
+## Faz 5 — Kalite ve paketleme
+- [ ] Kalite kontrol şablonları
+- [ ] Ölçüm kayıtları
+- [ ] Hold/release ve uygunsuzluk
+- [ ] Paket ve etiket
+- [ ] Paket/parti/sipariş izlenebilirliği
+
+**Çıkış:** Kalite onayı olmayan ürünün paketleme/teslimat akışına geçmesi engellenir.
+
+## Faz 6 — Teslimat ve mobil uygulamalar
+- [ ] DeliveryRun ve DeliveryStop
+- [ ] Kurye ataması
+- [ ] Operasyon mobil görev akışı
+- [ ] Teslimat sonucu ve kanıt
+- [ ] Müşteri mobil uygulaması
+- [ ] Bildirimler
+- [ ] Ağ kesintisi ve idempotency
+
+**Çıkış:** Sipariş üretimden teslimat sonucuna kadar izlenebilir.
+
+## Faz 7 — Pilot ve üretime hazırlık
+- [ ] Admin KPI panosu
+- [ ] Operasyon raporları
+- [ ] Hata/performans izleme
+- [ ] Yedek ve restore provası
+- [ ] Temsilî yük testi
+- [ ] Yetki/güvenlik gözden geçirmesi
+- [ ] Pilot kabul senaryoları
+- [ ] Operasyon eğitim dokümanı
+
+**Çıkış:** Pilot senaryoları geçer, bilinen riskler ve operasyon prosedürleri belgelenir.
+
+## Öncelik kuralı
+
+İlk dikey dilim: **malzeme → reçete → stok/lot → sipariş → rezervasyon**. Bu temel tutarlı hale gelmeden gelişmiş AI, gelişmiş rota optimizasyonu, mikroservis veya kapsamlı offline senaryolarına öncelik verilmez.
+
+## Definition of Done
+
+Bir görev tamamlanmış sayılır ancak:
+- İş kuralı backend'de uygulanmıştır.
+- Yetki ve nesne kapsamı doğrulanmıştır.
+- Gerekli testler yazılmış ve çalıştırılmıştır.
+- API/şema veya migration değişiklikleri belgelenmiştir.
+- Hata ve tekrar davranışı ele alınmıştır.
+- `08_CURRENT_STATE.md` güncellenmiştir.
+- Mimari karar değişmişse ADR/decision log eklenmiştir.
