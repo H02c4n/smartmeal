@@ -4,68 +4,76 @@
 
 ## Son güncelleme
 - Tarih: 2026-10-14
-- Güncelleyen: Faz 0 oturumu (repo iskeleti + Docker Compose doğrulaması + kapanış)
+- Güncelleyen: Faz 1 oturumu (Ingredient, Product, birim ve dönüşüm sözlüğü)
 
 ## Genel durum
-- [x] Repository yapısı oluşturuldu (yerel dosyalar; uzak depo ve ilk commit kullanıcı tarafından)
-- [x] Docker Compose yerelde çalışıyor — kullanıcının Windows/Git Bash makinesinde `docker compose build` başarılı, `docker compose up -d` ile `db` (healthy) ve `backend` (running) ayakta, `curl http://localhost:8000/api/v1/health/` → `{"status":"ok","database":"ok"}`
-- [x] Django API başlatılıyor (hem host üzerinde hem Docker içinde; health 200)
-- [x] PostgreSQL migration'ları — sandbox'ta ve kullanıcının Docker ortamında `migrate` başarılı (kullanıcı bildirdi, hata yok)
-- [x] CI/test altyapısı — testler sandbox'ta 52/52 geçiyor, kullanıcının Docker ortamında hatasız çalıştı ve GitHub Actions CI başarılı (kullanıcı bildirdi; log iletilmedi)
-- [x] OpenAPI şeması üretiliyor ve doğrulanıyor (`spectacular --validate --fail-on-warn`, sandbox)
+- [x] Faz 0 altyapısı (Django 5.2 LTS + DRF + PostgreSQL, custom user, hata zarfı, request_id, health, OpenAPI, CI) — Faz 0'da doğrulandı, bu oturumda değişmedi
+- [x] `catalog` app'i: `Unit`, `IngredientUnitConversion`, `Ingredient`, `Product` modelleri, servisleri, API'si, Django admin kaydı (sandbox'ta doğrulandı)
+- [ ] Faz 1 değişiklikleri kullanıcının Docker ortamında ve GitHub Actions'ta **henüz çalıştırılmadı**
+- [ ] ADR-007…010 ve yeni ADR-011 "Önerildi" durumunda; onay bekliyor
 
 ## Faz durumu
 - Faz 0 — Repo temelini hazırla: **Tamamlandı**
-- Faz 1–7: Bekliyor (Faz 1 sıradaki)
+- Faz 1 — Katalog ve reçeteler: **Kısmen** (Ingredient/Product ve birim-dönüşüm sözlüğü tamamlandı; RecipeVersion/RecipeLine, alerjen, Next.js admin ekranları bekliyor)
+- Faz 2–7: Bekliyor
 
 ## Son tamamlanan görev
-Faz 0 backend iskeleti: Django 5.2 LTS + DRF + PostgreSQL, custom user, request_id + hata zarfı, health endpoint, OpenAPI, pytest/ruff, Docker/Compose/Makefile/CI dosyaları, README. Docker Compose akışı (build, up, migrate, test, health) gerçek ortamda doğrulandı.
+Faz 1, ilk kısım: `apps/catalog` — birim sözlüğü (`g`, `kg`, `ml`, `l`, `pcs`; migration ile tohumlandı), malzemeye özel boyutlar arası dönüşüm (`IngredientUnitConversion`), `Ingredient` ve `Product` (SKU normalizasyonu/değişmezliği, DB CHECK kısıtları, pasife alma), `convert_quantity` servisi (Decimal, ara yuvarlama yok, sonda `ROUND_HALF_UP` 4 ondalık), katalog API'si ve Django admin kaydı. Kararlar ADR-011 önerisinde.
 
 ## Aktif görev
-Faz 0 kapandı. Aktif görev: Faz 1 (Ingredient ve Product + birim sözlüğü) — ayrı bir sohbette başlatılacak.
+Yok. Sıradaki: Faz 1, `RecipeVersion` ve `RecipeLine` (ayrı görev).
 
-## Değişen dosyalar
-`README.md`, `Makefile`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.editorconfig`, `.github/workflows/ci.yml`,
-`backend/` (pyproject.toml, uv.lock, Dockerfile, manage.py, conftest.py, config/*, apps/core/*, apps/accounts/*),
-`docs/architecture/` (Architecture Pack kopyası; 06, 07, 08 güncellendi).
+## Değişen dosyalar (bu oturum)
+- Yeni: `backend/apps/catalog/` — `apps.py`, `models.py`, `exceptions.py`, `services.py`, `selectors.py`, `serializers.py`, `permissions.py`, `views.py`, `urls.py`, `admin.py`, `migrations/0001_initial.py`, `migrations/0002_seed_units.py`, `tests/` (`conftest.py`, `test_models.py`, `test_convert_quantity.py`, `test_services.py`, `test_api_products.py`, `test_api_admin_products.py`, `test_api_admin_ingredients.py`, `test_django_admin.py`, `test_openapi.py`)
+- Değişen: `backend/config/settings/base.py` (`apps.catalog` INSTALLED_APPS), `backend/config/urls.py` (`apps.catalog.urls` api/v1 altına)
+- Belgeler: `docs/architecture/01` (modül tablosu notu), `02` (§3 modeller ve miktar politikası), `03` (Faz 1 endpoint'leri ve ortak kurallar), `06` (Faz 1 maddeleri), `07` (ADR-011 önerisi), `08` (bu dosya)
+- Değişmeyen: `pyproject.toml`, `uv.lock` (yeni bağımlılık yok), Docker/CI dosyaları
 
 ## Migration durumu
-- `accounts.0001_initial` (User; CHECK `accounts_user_email_lowercase`). Django'nun auth/admin/sessions/contenttypes migration'ları ile birlikte sandbox'ta boş veritabanına uygulandı.
-- `makemigrations --check` temiz (sandbox).
-- Docker ortamında `migrate`: başarılı (kullanıcı bildirdi).
+- `accounts.0001_initial` (Faz 0)
+- `catalog.0001_initial`: `Unit`, `IngredientUnitConversion`, `Ingredient`, `Product` ve kısıtlar (CHECK: SKU formatı, fiyat ≥ 0, para birimi formatı, çarpan/miktar > 0, birim kodu formatı; kısmi benzersiz indeks: boyut başına tek taban birim; benzersiz: SKU, birim kodu, (malzeme, birim))
+- `catalog.0002_seed_units`: `g`, `kg`, `ml`, `l`, `pcs` (idempotent `update_or_create`; geri alma no-op)
+- Sandbox'ta doğrulandı: boş DB'ye `migrate`, `catalog 0001`/`0002`/`zero` ileri-geri, yeniden `migrate`; `makemigrations --check --dry-run` temiz. Kullanıcının Docker ortamında henüz uygulanmadı.
 
 ## Test durumu
-**Sandbox** (Python 3.12.3, PostgreSQL 16, Django 5.2.18):
-- `pytest`: **52 geçti, 0 başarısız**
+**Sandbox** (Python 3.12.3, PostgreSQL 16.15, Django 5.2.18, bu oturumda çalıştırıldı):
+- `pytest`: **192 geçti, 0 başarısız** (52 Faz 0 + 140 yeni `apps/catalog`)
 - `ruff check` ve `ruff format --check`: temiz
 - `makemigrations --check --dry-run`: değişiklik yok
 - `spectacular --validate --fail-on-warn`: geçti
 
-**Docker (kullanıcı makinesi), ilk çalıştırma:** 50 geçti, 2 başarısız (`test_anonymous_gets_authentication_required_envelope`, `test_non_staff_gets_permission_denied_envelope`).
-- Sebep: Compose backend konteynerine `DJANGO_SETTINGS_MODULE=config.settings.local` veriyor; pytest-django'da ortam değişkeni `pyproject.toml` değerinden önceliklidir, testler `test` yerine `local` ayarlarıyla koştu (şema endpoint'i local'de bilerek `AllowAny`).
-- Düzeltme: `backend/pyproject.toml` → `addopts = "-ra --strict-markers --ds=config.settings.test"` (komut satırı seçeneği ortam değişkeninden önceliklidir). Sandbox'ta hata yeniden üretildi ve düzeltme sonrası 52/52 geçti.
-- Kullanıcı, düzeltme sonrası Docker içinde testlerin hatasız çalıştığını bildirdi (ayrıntılı çıktı iletilmedi).
+**Docker (kullanıcı makinesi) ve GitHub Actions:** Faz 1 kodu için henüz çalıştırılmadı. Doğrulama komutları:
+`docker compose run --rm backend python manage.py migrate`, `docker compose run --rm backend pytest`, `docker compose run --rm backend ruff check .`, `docker compose run --rm backend ruff format --check .`, `docker compose run --rm backend python manage.py makemigrations --check --dry-run`, `docker compose run --rm backend python manage.py spectacular --validate --fail-on-warn --file /dev/null`.
 
-**GitHub Actions:** CI başarılı (kullanıcı bildirdi).
+**Test edilmeyenler:** gerçek eşzamanlı (çok iş parçacıklı) yinelenen-SKU create yarışı (yalnızca `IntegrityError` eşlemesi simüle edildi); yük/performans; CSRF'li gerçek oturum akışı (testler `force_authenticate` kullanır).
 
 ## Ortamla ilgili notlar
-- Windows'ta 127.0.0.1:5432 host portu kullanılamadı (izin hatası); `.env` içinde `POSTGRES_HOST_PORT=55432` ile çözüldü. Uygulama veritabanına Docker ağı içinden `db:5432` ile bağlandığı için etkilenmez.
-- Windows/Git Bash'te `make` yok; README'deki `make` hedefleri yerine doğrudan `docker compose ...` komutları kullanılıyor (örn. `docker compose run --rm backend pytest`).
+- Windows'ta 127.0.0.1:5432 host portu kullanılamadı; `.env` içinde `POSTGRES_HOST_PORT=55432` ile çözüldü. Uygulama DB'ye Docker ağında `db:5432` ile bağlanır.
+- Windows/Git Bash'te `make` yok; doğrudan `docker compose run --rm backend ...` komutları kullanılır.
+- Yeni migration'ları uygulamak için: `docker compose run --rm backend python manage.py migrate`.
 
 ## Açık sorunlar ve ürün kararları
-- ADR-007…010 "Önerildi" durumunda; onay bekliyor
-- Kimlik doğrulama stratejisi (token/session) — şu an `SessionAuthentication` geçici yer tutucu (ADR-010)
-- Telefon benzersizliği, kullanıcı ad/soyad ihtiyacı (ADR-009)
+- ADR-007…010 ve ADR-011 "Önerildi"; onay bekliyor. ADR-007 (UUID PK) reddedilirse tüm Faz 1 modelleri etkilenir.
+- Kimlik doğrulama stratejisi hâlâ açık (ADR-010). Katalog yazma endpoint'leri geçici `IsCatalogAdmin` (= `is_staff`) kullanıyor; ADR-009'daki "`is_staff` yalnızca Django admin" ilkesiyle gerilim bilinçli ve geçici. `RoleAssignment` gelince değişmeli. Oturum tabanlı kimlik doğrulamada yazma istekleri CSRF ister (token stratejisi seçilince değişir).
+- `GET /products/` şimdilik kimlik zorunlu; müşteri akışı netleşince herkese açma kararı verilmeli.
+- Para birimi kümesi, vergi, para birimi başına küçük birim hassasiyeti (`price` şimdilik `NUMERIC(12,2)`), `currency` ISO 4217 listesiyle eşleştirilmiyor (00 §8, açık).
+- Birim kümesi: `mg` ve mutfak ölçüleri (çay kaşığı, yemek kaşığı, bardak) kapsam dışı; gerekirse migration + ADR.
+- **Risk:** `IngredientUnitConversion` değeri değişirse bu dönüşümü kullanan reçetelerin hesaplanan miktarı değişir; onaylı reçete geçmişini korumak için RecipeVersion onayında snapshot veya dönüşüm sürümlemesi gerekecek (RecipeLine görevinde karar).
+- Fire formülü karara bağlandı (verim bazlı `net ÷ (1 − fire)`, yalnızca RecipeLine'da) ama henüz kodlanmadı; geçerli aralık `0 ≤ fire < 1`.
+- "Malzeme başına boyut başına en fazla bir dönüşüm" kuralı model/servis seviyesindedir, DB kısıtı değildir; ihlal edilirse `convert_quantity` tahmin etmez, "Ambiguous" hatası verir.
+- Audit modülü henüz yok: fiyat/SKU/aktiflik değişiklikleri şimdilik denetim izi bırakmıyor (yalnızca `updated_at`).
+- Silme politikası: katalog öğeleri ve birimler `PROTECT` ile korunur, API ve Django admin'den silinemez; pasife alınır.
 - `LANGUAGE_CODE` (hata mesajı dili) henüz ürün kararı değil; `en-us` geçici
-- Üretim imajı/ayarları (`production.py`, gunicorn, statik dosya) kapsam dışı bırakıldı
-- Sipariş onayı/rezervasyon anı, ödeme sağlayıcısı, vergi/para birimi, tesis kapsamı, reçete birimleri, gıda güvenliği, offline kapsamı, bildirim sağlayıcısı, RPO/RTO, yük testi profili (değişmedi)
+- Üretim imajı/ayarları (`production.py`, gunicorn, statik dosya) kapsam dışı
+- Sipariş onayı/rezervasyon anı, ödeme sağlayıcısı, vergi, tesis kapsamı, gıda güvenliği, offline kapsamı, bildirim sağlayıcısı, RPO/RTO, yük testi profili (değişmedi)
 
 ## Sonraki görev
-1. Faz 1: Ingredient ve Product (+ birim sözlüğü). Önce 01_ARCHITECTURE ve 02_DATA_MODEL'e göre modül sınırı ve model alanları netleştirilip onaylanır, sonra kod yazılır.
+1. Faz 1: `RecipeVersion` ve `RecipeLine` — durum geçişleri (taslak → onaylı), onayda geçmişi koruma (dönüşüm snapshot kararı), fire (`waste_factor`) uygulaması, reçete miktarlarının taban birime hesaplanması (`convert_quantity` kullanılarak). Önce kapsam ve açık kararlar sorulur, onaydan sonra uygulanır.
+2. Ardından: alerjen bilgisi; Admin temel ekranları (Next.js); RoleAssignment (katalog yetkisinin `is_staff`'ten çıkarılması).
 
 ## Oturum sonu özeti
-- Tamamlanan: Faz 0 backend iskeleti; Docker Compose build/up/migrate/test/health gerçek ortamda doğrulandı; README'ye Windows komutları eklendi
-- Eklenen migration'lar: `accounts.0001_initial`
-- Açık hatalar: bilinen yok (Docker'daki test ayarı önceliği hatası düzeltildi ve doğrulandı)
-- Belgelerde güncellenen bölümler: 06 (Faz 0 durumu), 07 (ADR-007…010), 08 (bu dosya)
-- Sıradaki tek görev: Faz 1 (Ingredient ve Product)
+- Tamamlanan: `catalog` app'i (birim sözlüğü, dönüşüm servisi, Ingredient, Product, API, Django admin, testler, belgeler)
+- Eklenen migration'lar: `catalog.0001_initial`, `catalog.0002_seed_units`
+- Açık hatalar: bilinen yok; Docker/CI doğrulaması bekliyor
+- Belgelerde güncellenen bölümler: 01 (§3 not), 02 (§3), 03 (katalog), 06 (Faz 1), 07 (ADR-011), 08 (bu dosya)
+- Sıradaki tek görev: Faz 1, RecipeVersion ve RecipeLine

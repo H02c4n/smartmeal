@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     # SmartMeal modules (see docs/architecture/01_ARCHITECTURE.md)
     "apps.core",
     "apps.accounts",
+    "apps.catalog",
 ]
 
 MIDDLEWARE = [

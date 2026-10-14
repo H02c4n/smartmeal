@@ -41,6 +41,23 @@
 - `POST /admin/recipe-versions/`
 - `POST /admin/recipe-versions/{id}/approve/`
 
+**Faz 1 genişletmesi (uygulandı; ADR-011 ile önerildi).** Yukarıdaki listeye ek olarak şu endpoint'ler eklendi. Yeni alanlar ve endpoint'ler mevcut sözleşmeyi bozmaz.
+- `GET /admin/products/`, `GET|PATCH /admin/products/{id}/`, `POST /admin/products/{id}/activate/`, `POST /admin/products/{id}/deactivate/`
+- `GET|POST /admin/ingredients/`, `GET|PATCH /admin/ingredients/{id}/`, `POST /admin/ingredients/{id}/activate/`, `POST /admin/ingredients/{id}/deactivate/`
+- `GET /admin/units/`, `GET /admin/units/{id}/` (salt okunur birim sözlüğü)
+
+Ortak kurallar (aşağıdaki §7 maddeleri için):
+- **Kimlik:** hepsi kimlik doğrulama ister. `/products/*`: giriş yapmış herhangi bir kullanıcı (müşteri listesi kimlik zorunlu kabul edildi; herkese açma ayrı karar). `/admin/*`: **geçici** `IsCatalogAdmin` (`is_staff`); roller (`RoleAssignment`) gelince role dayalı izinle değiştirilecek. Kimliksiz: `AUTHENTICATION_REQUIRED`; yetkisiz: `PERMISSION_DENIED`.
+- **Nesne kapsamı:** `/products/` yalnızca `is_active=true` ürünleri döndürür; pasif ürün detayı `RESOURCE_NOT_FOUND`. Admin tüm kayıtları görür.
+- **Alanlar:** `is_active` düz gövdeyle yazılamaz (`VALIDATION_ERROR`); yalnızca `activate`/`deactivate` eylemleriyle değişir (idempotent, 200). `sku` ve ingredient `base_unit` oluşturulduktan sonra değişmez: PATCH'te farklı değer `VALIDATION_ERROR`, aynı değerin tekrarı kabul edilir. `PUT` ve `DELETE` yoktur (405).
+- **Filtreler (liste):** `q` (SKU/ad, büyük-küçük harf duyarsız), `is_active` (yalnızca admin listeleri, `true|false`, geçersiz değer `VALIDATION_ERROR`). Sayfalama: DRF `PageNumberPagination` (50): `count`, `next`, `previous`, `results`.
+- **Para:** `price` ondalık string (`"129.00"`) + `currency` (3 harf, büyük harfe normalize).
+- **Hatalar:** `VALIDATION_ERROR` (alan hataları `details` altında; yinelenen SKU `details.sku`), `RESOURCE_NOT_FOUND`, `AUTHENTICATION_REQUIRED`, `PERMISSION_DENIED`.
+- **Transaction/idempotency:** her yazma tek kayıt ve tek transaction'dır. Create, SKU benzersizliği ile doğal olarak tekrar-güvenlidir (ikinci istek `VALIDATION_ERROR`); eşzamanlı yinelenen create DB benzersiz indeksiyle yakalanıp aynı hataya çevrilir. Ayrı `Idempotency-Key` mekanizması bu fazda yoktur.
+- **İstek/yanıt şemaları:** OpenAPI şemasında (`/api/v1/schema/`); `ProductCreate`, `PatchedProductUpdate`, `IngredientCreate`, `PatchedIngredientUpdate`, `Product` (müşteri), `ProductAdmin`, `Ingredient`, `Unit`.
+- **Ingredient request:** `POST` gövdesi `{sku, name, base_unit}`; `base_unit` birim `code`'udur (`g`, `ml`, `pcs`), taban birim olmalıdır. `PATCH` yalnızca `name` değiştirir.
+- **Henüz API'si yok:** `IngredientUnitConversion` yönetimi (şimdilik Django admin ve `catalog.services.create_unit_conversion`).
+
 ### Sipariş
 - `POST /orders/`
 - `GET /orders/`

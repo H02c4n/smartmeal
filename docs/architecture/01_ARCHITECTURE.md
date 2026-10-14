@@ -26,9 +26,9 @@ Mikroservis, Kubernetes, Kafka ve dağıtık sistem karmaşıklığı ilk sürü
 | Django app | Sahip olduğu iş alanı |
 |---|---|
 | `accounts` | Kullanıcı, rol, tesis kapsamı, oturum ve izinler |
-| `catalog` | Ürün, kategori, SKU, satışa açıklık |
+| `catalog` | Ürün, kategori, SKU, satışa açıklık; malzeme tanımı (`Ingredient`) ve birim/dönüşüm sözlüğü (ADR-011, önerildi) |
 | `recipes` | Reçete sürümleri, satırlar, verim, malzeme ihtiyacı |
-| `inventory` | Malzeme, lot, stok hareketi, bakiye, rezervasyon, blokaj |
+| `inventory` | Malzeme stoğu (malzeme tanımı `catalog`'da): lot, stok hareketi, bakiye, rezervasyon, blokaj |
 | `purchasing` | Tedarikçi, satın alma siparişi, mal kabul |
 | `orders` | Müşteri siparişi, satırlar, fiyat snapshot'ı, iptal |
 | `planning` | Talep özeti, malzeme ihtiyacı, üretim planı |

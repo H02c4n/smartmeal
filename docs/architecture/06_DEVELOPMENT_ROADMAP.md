@@ -15,8 +15,8 @@ Süreler tahminidir; ekip boyutu, entegrasyonlar ve operasyonel gereksinimler ne
 **Çıkış:** Yeni geliştirici README ile projeyi yerelde çalıştırabilir; testler otomatik çalışır.
 
 ## Faz 1 — Katalog ve reçeteler
-- [ ] Ingredient ve Product
-- [ ] Birim ve dönüşüm sözlüğü
+- [x] Ingredient ve Product (modeller, servisler, API, Django admin; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
+- [x] Birim ve dönüşüm sözlüğü (`Unit`, `IngredientUnitConversion`, `convert_quantity`; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
 - [ ] RecipeVersion ve RecipeLine
 - [ ] Alerjen bilgisi
 - [ ] Admin temel ekranları

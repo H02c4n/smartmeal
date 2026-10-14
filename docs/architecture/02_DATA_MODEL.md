@@ -26,11 +26,18 @@ Roller örnek: `CUSTOMER`, `ADMIN`, `PLANNER`, `PURCHASING`, `PRODUCTION`, `QUAL
 
 ## 3. Katalog ve reçete
 
+### `Unit` (birim sözlüğü — ADR-011)
+`id`, `code` (benzersiz, `[a-z]{1,16}`), `name`, `dimension` (`mass` / `volume` / `count`), `factor_to_base` (`NUMERIC(20,9)`, `> 0`).
+`factor_to_base`, birimin boyutunun taban birimine (g, ml, pcs) çarpanıdır; boyut başına tam bir taban birim (çarpan 1) DB kısmi benzersiz indeksiyle zorlanır. Tohum (migration `catalog.0002`): `g`, `kg`, `ml`, `l`, `pcs`. Mutfak ölçüleri (çay/yemek kaşığı, bardak) kapsam dışıdır. Salt okunur referans veridir; değişiklik migration ile yapılır.
+
+### `IngredientUnitConversion`
+`id`, `ingredient_id`, `unit_id`, `base_unit_quantity` (`NUMERIC(20,9)`, `> 0`). Anlam: `1 <unit> = base_unit_quantity × ingredient.base_unit`. Yalnızca **boyutlar arası** (hacim↔ağırlık, adet↔ağırlık) ve malzemeye özeldir; (`ingredient`, `unit`) benzersiz, malzeme başına boyut başına en fazla bir kayıt (model `clean()`/servis ile; DB kısıtı değil). Aynı boyut içi dönüşüm `Unit.factor_to_base` ile yapılır.
+
 ### `Ingredient`
-`id`, `sku`, `name`, `base_unit`, `is_active`.
+`id`, `sku`, `name`, `base_unit` (FK → `Unit`, `PROTECT`; taban birim olmalı, oluşturulduktan sonra **değişmez**), `is_active`. `sku`: büyük harfe normalize, `^[A-Z0-9_-]{2,40}$` (DB CHECK), benzersiz, değişmez. Fiziksel silme yok; `is_active=false` ile pasife alınır. `waste_factor` malzemede **yoktur** (yalnızca `RecipeLine`'da, bkz. ADR-011).
 
 ### `Product`
-`id`, `sku`, `name`, `description`, `price`, `currency`, `is_active`, `allergen_information` veya ilişkili alerjen kayıtları.
+`id`, `sku`, `name`, `description`, `price` (`NUMERIC(12,2)`, `>= 0`), `currency` (3 harf `^[A-Z]{3}$`, varsayılan yok, ISO 4217 listesiyle eşleştirilmez), `is_active`. SKU kuralları Ingredient ile aynıdır. Vergi modellenmez (açık karar, 00 §8). `allergen_information` veya ilişkili alerjen kayıtları ayrı görevde gelir; bu modelde şimdilik alan yoktur.
 
 ### `RecipeVersion`
 `id`, `product_id`, `version_number`, `yield_quantity`, `yield_unit`, `status`, `effective_from`, `effective_to`, `approved_by`.
@@ -39,6 +46,8 @@ Roller örnek: `CUSTOMER`, `ADMIN`, `PLANNER`, `PURCHASING`, `PRODUCTION`, `QUAL
 `id`, `recipe_version_id`, `ingredient_id`, `quantity`, `unit`, `waste_factor` (iş kuralı kesinleşirse).
 
 Reçete sürümleri yayımlandıktan sonra geçmiş sipariş/üretim kayıtları için değiştirilmemelidir; değişiklik yeni sürüm oluşturur.
+
+**Miktar hesabı politikası (ADR-011):** miktar alanları `NUMERIC(14,4)`; hesaplamada float yok, ara adımlarda yuvarlama yok, sonuç bir kez `ROUND_HALF_UP` ile 4 ondalığa yuvarlanır (`catalog.services.convert_quantity`). Fire formülü (yalnızca `RecipeLine`'da): `brüt = net ÷ (1 − fire)`, `0 ≤ fire < 1`; bu görevde uygulanmadı, RecipeLine görevinde uygulanacak.
 
 ## 4. Tedarik ve stok
 
