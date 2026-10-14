@@ -11,18 +11,18 @@
 - [x] Docker Compose yerelde çalışıyor — kullanıcının Windows/Git Bash makinesinde `docker compose build` başarılı, `docker compose up -d` ile `db` (healthy) ve `backend` (running) ayakta, `curl http://localhost:8000/api/v1/health/` → `{"status":"ok","database":"ok"}`
 - [x] Django API başlatılıyor (hem host üzerinde hem Docker içinde; health 200)
 - [x] PostgreSQL migration'ları — sandbox'ta ve kullanıcının Docker ortamında `migrate` başarılı (kullanıcı bildirdi, hata yok)
-- [~] CI/test altyapısı — testler sandbox'ta 52/52 geçiyor ve kullanıcının Docker ortamında düzeltme sonrası hatasız çalıştığı bildirildi (kullanıcı bildirdi; çıktı iletilmedi); `.github/workflows/ci.yml` **hiç çalıştırılmadı**
+- [x] CI/test altyapısı — testler sandbox'ta 52/52 geçiyor, kullanıcının Docker ortamında hatasız çalıştı ve GitHub Actions CI başarılı (kullanıcı bildirdi; log iletilmedi)
 - [x] OpenAPI şeması üretiliyor ve doğrulanıyor (`spectacular --validate --fail-on-warn`, sandbox)
 
 ## Faz durumu
-- Faz 0 — Repo temelini hazırla: **Büyük ölçüde tamamlandı** (kalan tek madde: CI'nın GitHub'da ilk çalışması)
-- Faz 1–7: Bekliyor
+- Faz 0 — Repo temelini hazırla: **Tamamlandı**
+- Faz 1–7: Bekliyor (Faz 1 sıradaki)
 
 ## Son tamamlanan görev
 Faz 0 backend iskeleti: Django 5.2 LTS + DRF + PostgreSQL, custom user, request_id + hata zarfı, health endpoint, OpenAPI, pytest/ruff, Docker/Compose/Makefile/CI dosyaları, README. Docker Compose akışı (build, up, migrate, test, health) gerçek ortamda doğrulandı.
 
 ## Aktif görev
-Faz 0'ı kapatmak: depoyu GitHub'a gönderip CI'nın ilk çalışmasını doğrulamak. Ardından Faz 1.
+Faz 0 kapandı. Aktif görev: Faz 1 (Ingredient ve Product + birim sözlüğü) — ayrı bir sohbette başlatılacak.
 
 ## Değişen dosyalar
 `README.md`, `Makefile`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.editorconfig`, `.github/workflows/ci.yml`,
@@ -46,7 +46,7 @@ Faz 0'ı kapatmak: depoyu GitHub'a gönderip CI'nın ilk çalışmasını doğru
 - Düzeltme: `backend/pyproject.toml` → `addopts = "-ra --strict-markers --ds=config.settings.test"` (komut satırı seçeneği ortam değişkeninden önceliklidir). Sandbox'ta hata yeniden üretildi ve düzeltme sonrası 52/52 geçti.
 - Kullanıcı, düzeltme sonrası Docker içinde testlerin hatasız çalıştığını bildirdi (ayrıntılı çıktı iletilmedi).
 
-**Çalıştırılmayanlar:** GitHub Actions workflow'u.
+**GitHub Actions:** CI başarılı (kullanıcı bildirdi).
 
 ## Ortamla ilgili notlar
 - Windows'ta 127.0.0.1:5432 host portu kullanılamadı (izin hatası); `.env` içinde `POSTGRES_HOST_PORT=55432` ile çözüldü. Uygulama veritabanına Docker ağı içinden `db:5432` ile bağlandığı için etkilenmez.
@@ -61,12 +61,11 @@ Faz 0'ı kapatmak: depoyu GitHub'a gönderip CI'nın ilk çalışmasını doğru
 - Sipariş onayı/rezervasyon anı, ödeme sağlayıcısı, vergi/para birimi, tesis kapsamı, reçete birimleri, gıda güvenliği, offline kapsamı, bildirim sağlayıcısı, RPO/RTO, yük testi profili (değişmedi)
 
 ## Sonraki görev
-1. Kullanıcı: depoyu GitHub'a gönderip Actions'taki ilk CI çalışmasını bildirsin (başarısızsa log'u iletsin).
-2. Faz 1: Ingredient ve Product (+ birim sözlüğü). CI'nın ilk çalışması Faz 1'i engellemez.
+1. Faz 1: Ingredient ve Product (+ birim sözlüğü). Önce 01_ARCHITECTURE ve 02_DATA_MODEL'e göre modül sınırı ve model alanları netleştirilip onaylanır, sonra kod yazılır.
 
 ## Oturum sonu özeti
 - Tamamlanan: Faz 0 backend iskeleti; Docker Compose build/up/migrate/test/health gerçek ortamda doğrulandı; README'ye Windows komutları eklendi
 - Eklenen migration'lar: `accounts.0001_initial`
 - Açık hatalar: bilinen yok (Docker'daki test ayarı önceliği hatası düzeltildi ve doğrulandı)
 - Belgelerde güncellenen bölümler: 06 (Faz 0 durumu), 07 (ADR-007…010), 08 (bu dosya)
-- Sıradaki tek görev: Faz 1 (Ingredient ve Product); paralelde CI'nın GitHub'da ilk çalışması
+- Sıradaki tek görev: Faz 1 (Ingredient ve Product)
