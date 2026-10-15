@@ -28,8 +28,8 @@ Mikroservis, Kubernetes, Kafka ve dağıtık sistem karmaşıklığı ilk sürü
 | `accounts` | Kullanıcı, rol, tesis kapsamı, oturum ve izinler |
 | `catalog` | Ürün, kategori, SKU, satışa açıklık; malzeme tanımı (`Ingredient`) ve birim/dönüşüm sözlüğü (ADR-011, önerildi) |
 | `recipes` | Reçete sürümleri, satırlar, verim, malzeme ihtiyacı |
-| `inventory` | Malzeme stoğu (malzeme tanımı `catalog`'da): lot, stok hareketi, bakiye, rezervasyon, blokaj |
-| `purchasing` | Tedarikçi, satın alma siparişi, mal kabul |
+| `inventory` | Malzeme stoğu (malzeme tanımı `catalog`'da): lot, stok hareketi, bakiye, rezervasyon, kalite blokajı (ADR-012) |
+| `purchasing` | Tedarikçi, satın alma siparişi, mal kabul; kabul edilen satırı `inventory` servisiyle lota çevirir (ADR-012) |
 | `orders` | Müşteri siparişi, satırlar, fiyat snapshot'ı, iptal |
 | `planning` | Talep özeti, malzeme ihtiyacı, üretim planı |
 | `production` | Üretim emri/partisi, iş adımları, gerçekleşen miktar ve fire |
@@ -52,6 +52,8 @@ Mikroservis, Kubernetes, Kafka ve dağıtık sistem karmaşıklığı ilk sürü
 - `reporting` esas olarak salt okunur sorgular kullanır; iş verisini doğrudan değiştirmez.
 - `audit` kritik modüllerden olay alır; denetim kaydı uygulama loglarından ayrı düşünülür.
 - Modüller başka modülün modellerini kullanabilir, ancak başka modülün tablolarını doğrudan yazan iş mantığı oluşturmamalıdır. Gerekli çapraz modül işlemi sahibi modülün servis API'si üzerinden yapılır.
+
+**Faz 2 bağımlılık yönü (ADR-012):** `purchasing → inventory → catalog`; `inventory` yalnızca `purchasing.Supplier` ve `purchasing.GoodsReceiptLine`'a *metin referansıyla* (FK) bağlanır, `purchasing` modülünü içe aktarmaz. `core` ortak altyapıdır (hata sınıfları, idempotency, izin yardımcıları); iş tablosu içermez, tek istisnası `IdempotencyRecord`'dur.
 
 ## 5. Transaction ve yan etkiler
 

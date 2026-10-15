@@ -31,6 +31,9 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.catalog",
+    "apps.recipes",
+    "apps.purchasing",
+    "apps.inventory",
 ]
 
 MIDDLEWARE = [
@@ -120,6 +123,15 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "SmartMeal backend API. Draft contract: docs/architecture/03_API_CONTRACTS.md",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # Several modules have a ``status`` field; give each choice set an explicit, stable name.
+    "ENUM_NAME_OVERRIDES": {
+        "RecipeVersionStatusEnum": "apps.recipes.models.RecipeVersion.Status",
+        "PurchaseOrderStatusEnum": "apps.purchasing.models.PurchaseOrder.Status",
+        "GoodsReceiptStatusEnum": "apps.purchasing.models.GoodsReceipt.Status",
+        "ReservationStatusEnum": "apps.inventory.models.StockReservation.Status",
+        "LotQualityStatusEnum": "apps.inventory.models.InventoryLot.QualityStatus",
+        "StockMovementTypeEnum": "apps.inventory.models.StockMovement.Type",
+    },
     # Schema is not public by default; local settings relax this.
     "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
 }

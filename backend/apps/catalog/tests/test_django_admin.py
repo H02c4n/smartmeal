@@ -32,6 +32,10 @@ def test_admin_creates_ingredient_with_normalised_sku(client, superuser, gram):
             "unit_conversions-INITIAL_FORMS": "0",
             "unit_conversions-MIN_NUM_FORMS": "0",
             "unit_conversions-MAX_NUM_FORMS": "1000",
+            "allergen_links-TOTAL_FORMS": "0",
+            "allergen_links-INITIAL_FORMS": "0",
+            "allergen_links-MIN_NUM_FORMS": "0",
+            "allergen_links-MAX_NUM_FORMS": "1000",
         },
     )
     assert response.status_code == 302, getattr(response, "context", None)

@@ -2,7 +2,7 @@
 
 from django.db.models import Q, QuerySet
 
-from .models import Ingredient, Product, Unit
+from .models import Allergen, Ingredient, IngredientAllergen, Product, Unit
 
 
 def _search(queryset: QuerySet, q: str | None) -> QuerySet:
@@ -34,3 +34,14 @@ def admin_ingredients(
 
 def units() -> QuerySet[Unit]:
     return Unit.objects.all()
+
+
+def allergens(*, is_active: bool | None = None) -> QuerySet[Allergen]:
+    queryset = Allergen.objects.all()
+    if is_active is not None:
+        queryset = queryset.filter(is_active=is_active)
+    return queryset
+
+
+def ingredient_allergen_links(ingredient: Ingredient) -> QuerySet[IngredientAllergen]:
+    return IngredientAllergen.objects.filter(ingredient=ingredient).select_related("allergen")

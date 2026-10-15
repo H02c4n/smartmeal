@@ -12,7 +12,14 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.serializers import as_serializer_error
 
 from .exceptions import ImmutableFieldError, UnitConversionError
-from .models import Ingredient, IngredientUnitConversion, Product, Unit
+from .models import (
+    Allergen,
+    Ingredient,
+    IngredientAllergen,
+    IngredientUnitConversion,
+    Product,
+    Unit,
+)
 
 # --- Quantity policy (ADR-011) --------------------------------------------------------------
 # No rounding in intermediate steps; the final result is quantised once, ROUND_HALF_UP,
@@ -106,6 +113,65 @@ def update_product(product: Product, **changes) -> Product:
 
 def set_product_active(product: Product, is_active: bool) -> Product:
     return _set_active(product, is_active)
+
+
+# --- Allergens ------------------------------------------------------------------------------
+def create_allergen(*, code: str, name: str) -> Allergen:
+    return _insert(Allergen(code=code, name=name))
+
+
+def update_allergen(allergen: Allergen, *, name: str) -> Allergen:
+    """Only the name is editable; the code is immutable."""
+    allergen.name = name
+    return _update(allergen, ["name"])
+
+
+def set_allergen_active(allergen: Allergen, is_active: bool) -> Allergen:
+    return _set_active(allergen, is_active)
+
+
+def set_ingredient_allergens(
+    ingredient: Ingredient, entries: list[tuple[Allergen, str]]
+) -> list[IngredientAllergen]:
+    """Replace the ingredient's allergen declaration with ``entries`` (allergen, presence).
+
+    All-or-nothing in one transaction; the row is locked so concurrent replacements serialise.
+    Declaring an inactive allergen is rejected unless the ingredient already carries it, so a
+    deactivated allergen cannot silently disappear from existing declarations.
+    """
+    seen: set = set()
+    for allergen, presence in entries:
+        if allergen.pk in seen:
+            raise ValidationError({"allergens": [f"Duplicate allergen {allergen.code}."]})
+        seen.add(allergen.pk)
+        if presence not in IngredientAllergen.Presence.values:
+            raise ValidationError({"allergens": [f"Invalid presence '{presence}'."]})
+
+    with transaction.atomic():
+        Ingredient.objects.select_for_update().get(pk=ingredient.pk)
+        existing = {
+            link.allergen_id: link
+            for link in IngredientAllergen.objects.filter(ingredient=ingredient)
+        }
+        for allergen, _presence in entries:
+            if not allergen.is_active and allergen.pk not in existing:
+                raise ValidationError(
+                    {"allergens": [f"Allergen {allergen.code} is inactive and cannot be added."]}
+                )
+        wanted = {allergen.pk: presence for allergen, presence in entries}
+        IngredientAllergen.objects.filter(ingredient=ingredient).exclude(
+            allergen_id__in=wanted
+        ).delete()
+        for allergen, presence in entries:
+            link = existing.get(allergen.pk)
+            if link is None:
+                IngredientAllergen.objects.create(
+                    ingredient=ingredient, allergen=allergen, presence=presence
+                )
+            elif link.presence != presence:
+                link.presence = presence
+                link.save(update_fields=["presence", "updated_at"])
+    return list(IngredientAllergen.objects.filter(ingredient=ingredient).select_related("allergen"))
 
 
 # --- Unit conversion ------------------------------------------------------------------------

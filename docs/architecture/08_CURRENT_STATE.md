@@ -4,76 +4,87 @@
 
 ## Son güncelleme
 - Tarih: 2026-10-14
-- Güncelleyen: Faz 1 oturumu (Ingredient, Product, birim ve dönüşüm sözlüğü)
+- Güncelleyen: Faz 1 tamamlayıcıları (alerjen, reçete) + Faz 2 oturumu (tedarik ve stok), backend
 
 ## Genel durum
-- [x] Faz 0 altyapısı (Django 5.2 LTS + DRF + PostgreSQL, custom user, hata zarfı, request_id, health, OpenAPI, CI) — Faz 0'da doğrulandı, bu oturumda değişmedi
-- [x] `catalog` app'i: `Unit`, `IngredientUnitConversion`, `Ingredient`, `Product` modelleri, servisleri, API'si, Django admin kaydı (sandbox'ta doğrulandı)
-- [ ] Faz 1 değişiklikleri kullanıcının Docker ortamında ve GitHub Actions'ta **henüz çalıştırılmadı**
-- [ ] ADR-007…010 ve yeni ADR-011 "Önerildi" durumunda; onay bekliyor
+- [x] Faz 0 altyapısı (değişmedi)
+- [x] `catalog`: Unit, IngredientUnitConversion, Ingredient, Product (Faz 1/ilk kısım) + **Allergen, IngredientAllergen** (bu oturum)
+- [x] `recipes`: RecipeVersion, RecipeLine, onay/emekli, taban birim snapshot'ı, fire, ihtiyaç hesabı (bu oturum)
+- [x] `purchasing`: Supplier, PurchaseOrder(+Line), GoodsReceipt(+Line) (bu oturum)
+- [x] `inventory`: InventoryLot, StockMovement, StockReservation, LotQualityEvent, FEFO, kalite blokajı, uzlaştırma (bu oturum)
+- [x] `core`: ortak 409 hata sınıfları, `Idempotency-Key` altyapısı, izin yardımcıları (bu oturum)
+- [ ] **Hiçbir Faz 1/Faz 2 değişikliği kullanıcının Docker ortamında veya GitHub Actions'ta çalıştırılmadı.** Aşağıdaki sonuçlar sandbox'tandır.
+- [ ] ADR-007…011 ve yeni **ADR-012 "Önerildi"**; onay bekliyor
 
 ## Faz durumu
-- Faz 0 — Repo temelini hazırla: **Tamamlandı**
-- Faz 1 — Katalog ve reçeteler: **Kısmen** (Ingredient/Product ve birim-dönüşüm sözlüğü tamamlandı; RecipeVersion/RecipeLine, alerjen, Next.js admin ekranları bekliyor)
-- Faz 2–7: Bekliyor
+- Faz 0: **Tamamlandı**
+- Faz 1: **Backend tamamlandı**; kalan tek madde **Next.js Admin temel ekranları** (henüz başlanmadı)
+- Faz 2: **Backend tamamlandı** (sandbox'ta doğrulandı); Docker/CI doğrulaması ve ADR-012 onayı bekliyor
+- Faz 3–7: Bekliyor
 
 ## Son tamamlanan görev
-Faz 1, ilk kısım: `apps/catalog` — birim sözlüğü (`g`, `kg`, `ml`, `l`, `pcs`; migration ile tohumlandı), malzemeye özel boyutlar arası dönüşüm (`IngredientUnitConversion`), `Ingredient` ve `Product` (SKU normalizasyonu/değişmezliği, DB CHECK kısıtları, pasife alma), `convert_quantity` servisi (Decimal, ara yuvarlama yok, sonda `ROUND_HALF_UP` 4 ondalık), katalog API'si ve Django admin kaydı. Kararlar ADR-011 önerisinde.
+1. **Alerjen:** `Allergen` (tohumsuz, kod değişmez, pasife alınır), `IngredientAllergen` (`contains`/`may_contain`), malzeme beyanını bütün olarak değiştiren `PUT`, reçete bazında türetilmiş alerjen özeti.
+2. **Reçete:** sürüm numaralandırma (ürün kilidiyle), taslak düzenleme, `approve` (satırsız/pasif malzeme/dönüştürülemeyen birim reddi; miktarları taban birime dondurma; önceki onaylıyı emekli etme), `retire`, `requirements` (net/brüt ihtiyaç, ölçeklenmiş).
+3. **Tedarik:** tedarikçi, sipariş durum makinesi, atomik mal kabul (lot + `RECEIPT` hareketi + sipariş miktarları), %10 fazla-teslimat toleransı, mal kabul ters kaydı.
+4. **Stok:** lot (`pending` başlar), yalnızca-ekleme defter, rezervasyon (lot bazlı, FEFO, tümü-ya-hiç, idempotent, süre sonu), tüketim (`LOT_BLOCKED` kuralı), serbest bırakma/bloke (gerekçe + olay günlüğü), düzeltme ve ters hareket, bakiye tanımı (`physical = reserved + available + unavailable`), `reconcile_inventory`.
+5. **Idempotency:** `core.IdempotencyRecord` + `run_idempotent`; mal kabul ve stok düzeltmede `Idempotency-Key` zorunlu.
 
 ## Aktif görev
-Yok. Sıradaki: Faz 1, `RecipeVersion` ve `RecipeLine` (ayrı görev).
+Yok. Sıradaki: bkz. "Sonraki görev".
 
 ## Değişen dosyalar (bu oturum)
-- Yeni: `backend/apps/catalog/` — `apps.py`, `models.py`, `exceptions.py`, `services.py`, `selectors.py`, `serializers.py`, `permissions.py`, `views.py`, `urls.py`, `admin.py`, `migrations/0001_initial.py`, `migrations/0002_seed_units.py`, `tests/` (`conftest.py`, `test_models.py`, `test_convert_quantity.py`, `test_services.py`, `test_api_products.py`, `test_api_admin_products.py`, `test_api_admin_ingredients.py`, `test_django_admin.py`, `test_openapi.py`)
-- Değişen: `backend/config/settings/base.py` (`apps.catalog` INSTALLED_APPS), `backend/config/urls.py` (`apps.catalog.urls` api/v1 altına)
-- Belgeler: `docs/architecture/01` (modül tablosu notu), `02` (§3 modeller ve miktar politikası), `03` (Faz 1 endpoint'leri ve ortak kurallar), `06` (Faz 1 maddeleri), `07` (ADR-011 önerisi), `08` (bu dosya)
-- Değişmeyen: `pyproject.toml`, `uv.lock` (yeni bağımlılık yok), Docker/CI dosyaları
+- Yeni app'ler: `backend/apps/recipes/`, `backend/apps/purchasing/`, `backend/apps/inventory/` (models, services, selectors, serializers, views, urls, admin, migrations, tests; inventory'de ayrıca `management/commands/{reconcile_inventory,release_expired_reservations}.py`)
+- `backend/apps/catalog/`: `models.py` (+Allergen, IngredientAllergen), `services.py`, `selectors.py`, `serializers.py`, `views.py`, `urls.py`, `admin.py`, `migrations/0003_allergens.py`, `tests/test_allergens.py`; `tests/test_django_admin.py` (yeni inline form alanları)
+- `backend/apps/core/`: yeni `api_errors.py`, `idempotency.py`, `permissions.py`, `serializers.py`, `migrations/0001_idempotency.py`, `models.py` (+IdempotencyRecord), `exceptions.py` (`error.details` için `extra` desteği), `tests/test_api_errors.py`, `tests/test_idempotency.py`; `tests/test_project_setup.py` ("core tablosuzdur" testi "yalnızca IdempotencyRecord" olarak bilinçli değiştirildi)
+- `backend/config/settings/base.py` (INSTALLED_APPS, `SPECTACULAR_SETTINGS.ENUM_NAME_OVERRIDES`), `backend/config/urls.py`
+- `backend/pyproject.toml`: testler için ruff `F811` yok sayıldı (başka app'in fixture'larını içe aktarma)
+- Belgeler: `docs/architecture/{01,02,03,06,07,08}`, `README.md`
+- Değişmeyen: `uv.lock`/bağımlılıklar (yeni paket yok), Docker/CI dosyaları
 
 ## Migration durumu
-- `accounts.0001_initial` (Faz 0)
-- `catalog.0001_initial`: `Unit`, `IngredientUnitConversion`, `Ingredient`, `Product` ve kısıtlar (CHECK: SKU formatı, fiyat ≥ 0, para birimi formatı, çarpan/miktar > 0, birim kodu formatı; kısmi benzersiz indeks: boyut başına tek taban birim; benzersiz: SKU, birim kodu, (malzeme, birim))
-- `catalog.0002_seed_units`: `g`, `kg`, `ml`, `l`, `pcs` (idempotent `update_or_create`; geri alma no-op)
-- Sandbox'ta doğrulandı: boş DB'ye `migrate`, `catalog 0001`/`0002`/`zero` ileri-geri, yeniden `migrate`; `makemigrations --check --dry-run` temiz. Kullanıcının Docker ortamında henüz uygulanmadı.
+- Faz 0/1: `accounts.0001`, `catalog.0001`, `catalog.0002_seed_units`
+- Yeni: `catalog.0003_allergens`, `core.0001_idempotency`, `recipes.0001_initial`, `purchasing.0001_initial`, `inventory.0001_initial`, `inventory.0002_initial` (purchasing ↔ inventory FK'leri bu yüzden iki parça)
+- Sandbox'ta doğrulandı: boş DB'ye `migrate`, `inventory/purchasing/recipes/core zero` ve `catalog 0002`'ye geri alma, yeniden `migrate`; `makemigrations --check --dry-run` temiz. **Kullanıcının Docker ortamında uygulanmadı.**
 
 ## Test durumu
-**Sandbox** (Python 3.12.3, PostgreSQL 16.15, Django 5.2.18, bu oturumda çalıştırıldı):
-- `pytest`: **192 geçti, 0 başarısız** (52 Faz 0 + 140 yeni `apps/catalog`)
+**Sandbox** (Python 3.12.3, PostgreSQL 16, Django 5.2; bu oturumda çalıştırıldı):
+- `pytest`: **414 geçti, 0 başarısız** (192 önceki + yeni catalog/core/recipes/purchasing/inventory testleri)
 - `ruff check` ve `ruff format --check`: temiz
 - `makemigrations --check --dry-run`: değişiklik yok
 - `spectacular --validate --fail-on-warn`: geçti
+- Gerçek eşzamanlılık testleri (`transaction=True`, ayrı bağlantılar/thread'ler): 20 paralel rezervasyon/1000 g stok → tam 10 başarılı; çok lotlu paralel rezervasyon; aynı tüketicinin paralel tekrarı tek rezervasyon; paralel tüketim/serbest bırakma tek etki; düzeltme ↔ rezervasyon yarışı; paralel mal kabulde fazla teslimat reddi; paralel reçete onayı sonunda tek `approved`.
 
-**Docker (kullanıcı makinesi) ve GitHub Actions:** Faz 1 kodu için henüz çalıştırılmadı. Doğrulama komutları:
-`docker compose run --rm backend python manage.py migrate`, `docker compose run --rm backend pytest`, `docker compose run --rm backend ruff check .`, `docker compose run --rm backend ruff format --check .`, `docker compose run --rm backend python manage.py makemigrations --check --dry-run`, `docker compose run --rm backend python manage.py spectacular --validate --fail-on-warn --file /dev/null`.
+**Docker (kullanıcı makinesi) ve GitHub Actions:** henüz çalıştırılmadı. Komutlar: `docker compose run --rm backend python manage.py migrate`, `… pytest`, `… ruff check .`, `… ruff format --check .`, `… python manage.py makemigrations --check --dry-run`, `… python manage.py spectacular --validate --fail-on-warn --file /dev/null`.
 
-**Test edilmeyenler:** gerçek eşzamanlı (çok iş parçacıklı) yinelenen-SKU create yarışı (yalnızca `IntegrityError` eşlemesi simüle edildi); yük/performans; CSRF'li gerçek oturum akışı (testler `force_authenticate` kullanır).
+**Test edilmeyenler:** yük/performans (özellikle `reserve_stock`'un aday kilitleme maliyeti ~600 sipariş/hafta profilinde); gerçek oturum/CSRF akışı (testler `force_authenticate`); süre sonu rezervasyon zamanlayıcısı (yalnızca komut test edildi); yedekten geri yükleme.
 
 ## Ortamla ilgili notlar
-- Windows'ta 127.0.0.1:5432 host portu kullanılamadı; `.env` içinde `POSTGRES_HOST_PORT=55432` ile çözüldü. Uygulama DB'ye Docker ağında `db:5432` ile bağlanır.
-- Windows/Git Bash'te `make` yok; doğrudan `docker compose run --rm backend ...` komutları kullanılır.
-- Yeni migration'ları uygulamak için: `docker compose run --rm backend python manage.py migrate`.
+- Windows'ta `127.0.0.1:5432` kullanılamazsa `.env` içinde `POSTGRES_HOST_PORT=55432`.
+- Windows/Git Bash'te `make` yok; `docker compose run --rm backend ...` kullanılır.
+- Yeni migration'lar için: `docker compose run --rm backend python manage.py migrate`.
+- Yeni izinler (`inventory.adjust_stock/release_lot/block_lot`, `purchasing.reverse_goodsreceipt`) migration ile oluşur; süper kullanıcı hepsine sahiptir, diğer personel için Django admin'den atanır.
 
 ## Açık sorunlar ve ürün kararları
-- ADR-007…010 ve ADR-011 "Önerildi"; onay bekliyor. ADR-007 (UUID PK) reddedilirse tüm Faz 1 modelleri etkilenir.
-- Kimlik doğrulama stratejisi hâlâ açık (ADR-010). Katalog yazma endpoint'leri geçici `IsCatalogAdmin` (= `is_staff`) kullanıyor; ADR-009'daki "`is_staff` yalnızca Django admin" ilkesiyle gerilim bilinçli ve geçici. `RoleAssignment` gelince değişmeli. Oturum tabanlı kimlik doğrulamada yazma istekleri CSRF ister (token stratejisi seçilince değişir).
-- `GET /products/` şimdilik kimlik zorunlu; müşteri akışı netleşince herkese açma kararı verilmeli.
-- Para birimi kümesi, vergi, para birimi başına küçük birim hassasiyeti (`price` şimdilik `NUMERIC(12,2)`), `currency` ISO 4217 listesiyle eşleştirilmiyor (00 §8, açık).
-- Birim kümesi: `mg` ve mutfak ölçüleri (çay kaşığı, yemek kaşığı, bardak) kapsam dışı; gerekirse migration + ADR.
-- **Risk:** `IngredientUnitConversion` değeri değişirse bu dönüşümü kullanan reçetelerin hesaplanan miktarı değişir; onaylı reçete geçmişini korumak için RecipeVersion onayında snapshot veya dönüşüm sürümlemesi gerekecek (RecipeLine görevinde karar).
-- Fire formülü karara bağlandı (verim bazlı `net ÷ (1 − fire)`, yalnızca RecipeLine'da) ama henüz kodlanmadı; geçerli aralık `0 ≤ fire < 1`.
-- "Malzeme başına boyut başına en fazla bir dönüşüm" kuralı model/servis seviyesindedir, DB kısıtı değildir; ihlal edilirse `convert_quantity` tahmin etmez, "Ambiguous" hatası verir.
-- Audit modülü henüz yok: fiyat/SKU/aktiflik değişiklikleri şimdilik denetim izi bırakmıyor (yalnızca `updated_at`).
-- Silme politikası: katalog öğeleri ve birimler `PROTECT` ile korunur, API ve Django admin'den silinemez; pasife alınır.
-- `LANGUAGE_CODE` (hata mesajı dili) henüz ürün kararı değil; `en-us` geçici
-- Üretim imajı/ayarları (`production.py`, gunicorn, statik dosya) kapsam dışı
-- Sipariş onayı/rezervasyon anı, ödeme sağlayıcısı, vergi, tesis kapsamı, gıda güvenliği, offline kapsamı, bildirim sağlayıcısı, RPO/RTO, yük testi profili (değişmedi)
+- **ADR-012 onayı** (özellikle: lot bazlı rezervasyon, tesis yok, %10 fazla-teslimat toleransı, `IdempotencyRecord`'un `core`'da olması). ADR-007…011 hâlâ onay bekliyor.
+- **Kimlik doğrulama (ADR-010) ve roller:** tüm yeni endpoint'ler geçici `is_staff` + Django model izinleri kullanıyor; `RoleAssignment` gelince değişmeli. Oturum kimlik doğrulamasında yazma istekleri CSRF ister.
+- **Rezervasyon süresi** (00 §8): ürün kararı yok; `expires_at` isteğe bağlı, zamanlayıcı yok. Faz 3'te sipariş onayı ile birlikte netleşmeli (Celery/cron gerekebilir).
+- **Tesis sayısı** (00 §8): tek tesis varsayıldı.
+- **Fazla teslimat toleransı %10** geçici varsayım.
+- **Audit:** `audit` modülü yok; kalite değişiklikleri `LotQualityEvent`'te, stok değişiklikleri defterde. Fiyat/SKU/aktiflik ve reçete onayı için genel denetim izi yok.
+- **Reçete ↔ stok bağı:** `recipes.requirements` malzeme ihtiyacını hesaplar ama stokla karşılaştırmaz/rezerve etmez; bu Faz 3/4 işi (sipariş → reçete sürümü snapshot'ı → rezervasyon).
+- **Alerjen listesi** boş başlar; hangi alerjenlerin beyan edileceği ve etiket yükümlülükleri ülke/hukuk doğrulaması ister (05 §4). Türetilmiş reçete alerjen özeti yasal etiket değildir.
+- Para birimi kümesi, vergi, `LANGUAGE_CODE`, üretim ayarları, ödeme sağlayıcısı, gıda güvenliği saklama süreleri, offline kapsamı, RPO/RTO, yük testi profili (değişmedi).
+- Katalog/PO/lot kayıtları silinmez (PROTECT); düzeltme için pasife alma / ters kayıt kullanılır.
+- Django admin: stok, reçete, PO ve mal kabul **salt okunur** (ledger/durum makinesini aşmasın diye); yalnızca tedarikçi ve alerjen/katalog kayıtları düzenlenebilir.
 
 ## Sonraki görev
-1. Faz 1: `RecipeVersion` ve `RecipeLine` — durum geçişleri (taslak → onaylı), onayda geçmişi koruma (dönüşüm snapshot kararı), fire (`waste_factor`) uygulaması, reçete miktarlarının taban birime hesaplanması (`convert_quantity` kullanılarak). Önce kapsam ve açık kararlar sorulur, onaydan sonra uygulanır.
-2. Ardından: alerjen bilgisi; Admin temel ekranları (Next.js); RoleAssignment (katalog yetkisinin `is_staff`'ten çıkarılması).
+1. Kullanıcı ortamında doğrulama: `migrate`, `pytest`, lint, şema (yukarıdaki komutlar) ve GitHub Actions; ADR-007…012 kararı.
+2. Faz 1'in kalanı: **Next.js Admin temel ekranları** (katalog/reçete/alerjen/tedarik/stok). Ayrı bir görev olarak önce kimlik doğrulama stratejisi (ADR-010) ve `RoleAssignment` kararı gerekir.
+3. Faz 3: Order/OrderLine, fiyat snapshot'ı, durum makinesi, sipariş → `reserve_stock` entegrasyonu. Önce 00 §8'deki sipariş onayı/rezervasyon süresi kararı alınmalı.
 
 ## Oturum sonu özeti
-- Tamamlanan: `catalog` app'i (birim sözlüğü, dönüşüm servisi, Ingredient, Product, API, Django admin, testler, belgeler)
-- Eklenen migration'lar: `catalog.0001_initial`, `catalog.0002_seed_units`
+- Tamamlanan: alerjen, reçete (recipes), tedarik (purchasing), stok (inventory), ortak idempotency/hata altyapısı, belgeler
+- Eklenen migration'lar: `catalog.0003_allergens`, `core.0001_idempotency`, `recipes.0001_initial`, `purchasing.0001_initial`, `inventory.0001_initial`, `inventory.0002_initial`
 - Açık hatalar: bilinen yok; Docker/CI doğrulaması bekliyor
-- Belgelerde güncellenen bölümler: 01 (§3 not), 02 (§3), 03 (katalog), 06 (Faz 1), 07 (ADR-011), 08 (bu dosya)
-- Sıradaki tek görev: Faz 1, RecipeVersion ve RecipeLine
+- Bu oturumda yakalanıp düzeltilen gerçek hatalar: reçete satırı CHECK kısıtının NULL durumunu kaçırması; satır değiştirirken eski satırlarla benzersizlik çakışması
+- Sıradaki tek görev: Docker/CI doğrulaması + ADR-012 onayı, ardından Next.js Admin (Faz 1 kalanı)

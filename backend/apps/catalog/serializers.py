@@ -5,9 +5,12 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from .models import (
+    ALLERGEN_CODE_PATTERN,
     CURRENCY_PATTERN,
     SKU_PATTERN,
+    Allergen,
     Ingredient,
+    IngredientAllergen,
     Product,
     Unit,
     normalize_currency,
@@ -170,3 +173,60 @@ class ProductUpdateSerializer(WriteGuardMixin, serializers.Serializer):
 
 class ProductCreateSerializer(ProductUpdateSerializer):
     sku = unique_sku_field(Product)
+
+
+# --- Allergens ------------------------------------------------------------------------------
+class AllergenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Allergen
+        fields = ["id", "code", "name", "is_active", "created_at", "updated_at"]
+        read_only_fields = fields
+
+
+class AllergenUpdateSerializer(WriteGuardMixin, serializers.Serializer):
+    name = serializers.CharField(max_length=100)
+    immutable_fields = ("code",)
+
+    def current_values(self) -> dict[str, str]:
+        return {"code": self.instance.code}
+
+
+class _AllergenCodeField(serializers.CharField):
+    def to_internal_value(self, data):
+        return super().to_internal_value(data).strip().lower()
+
+
+class AllergenCreateSerializer(AllergenUpdateSerializer):
+    code = _AllergenCodeField(
+        max_length=32,
+        validators=[
+            RegexValidator(
+                ALLERGEN_CODE_PATTERN,
+                message="Code must be 2-32 characters: a-z, 0-9, '_', starting with a letter.",
+            ),
+            UniqueValidator(
+                queryset=Allergen.objects.all(), message="An allergen with this code exists."
+            ),
+        ],
+    )
+
+
+class IngredientAllergenSerializer(serializers.ModelSerializer):
+    allergen = serializers.SlugRelatedField(slug_field="code", read_only=True)
+    name = serializers.CharField(source="allergen.name", read_only=True)
+
+    class Meta:
+        model = IngredientAllergen
+        fields = ["allergen", "name", "presence"]
+        read_only_fields = fields
+
+
+class IngredientAllergenEntrySerializer(serializers.Serializer):
+    allergen = serializers.SlugRelatedField(slug_field="code", queryset=Allergen.objects.all())
+    presence = serializers.ChoiceField(choices=IngredientAllergen.Presence.choices)
+
+
+class IngredientAllergenSetSerializer(serializers.Serializer):
+    """Full replacement of the ingredient's allergen declaration (empty list clears it)."""
+
+    allergens = IngredientAllergenEntrySerializer(many=True)

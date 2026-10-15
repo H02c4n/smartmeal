@@ -17,24 +17,26 @@ Süreler tahminidir; ekip boyutu, entegrasyonlar ve operasyonel gereksinimler ne
 ## Faz 1 — Katalog ve reçeteler
 - [x] Ingredient ve Product (modeller, servisler, API, Django admin; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
 - [x] Birim ve dönüşüm sözlüğü (`Unit`, `IngredientUnitConversion`, `convert_quantity`; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
-- [ ] RecipeVersion ve RecipeLine
-- [ ] Alerjen bilgisi
-- [ ] Admin temel ekranları
-- [ ] Model ve API testleri
+- [x] RecipeVersion ve RecipeLine (taslak → onaylı → emekli, onayda taban birim snapshot'ı, fire, ihtiyaç hesabı; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
+- [x] Alerjen bilgisi (`Allergen`, `IngredientAllergen`, reçete bazında türetilmiş özet; sandbox'ta test edildi)
+- [ ] Admin temel ekranları (Next.js — henüz başlanmadı; Faz 1'in tek açık maddesi)
+- [x] Model ve API testleri (backend için; sandbox'ta çalıştırıldı)
 
-**Çıkış:** Ürün ve reçete sürümü yönetilir; reçete miktarları standart birimlerle hesaplanabilir.
+**Çıkış:** Ürün ve reçete sürümü yönetilir; reçete miktarları standart birimlerle hesaplanabilir. *(Backend karşılandı; Next.js Admin ekranları hariç.)*
 
 ## Faz 2 — Tedarik ve stok
-- [ ] Supplier ve PurchaseOrder
-- [ ] GoodsReceipt
-- [ ] InventoryLot
-- [ ] StockMovement
-- [ ] StockReservation
-- [ ] FEFO aday tahsisi
-- [ ] Kalite blokajı
-- [ ] Eşzamanlılık ve uzlaştırma testleri
+- [x] Supplier ve PurchaseOrder (durum makinesi: draft → submitted → partially_received → received / cancelled)
+- [x] GoodsReceipt (atomik; fazla teslimat toleransı %10; ters kayıt)
+- [x] InventoryLot (kabulde `pending`; lot kodu ve SKT zorunlu)
+- [x] StockMovement (yalnızca ekleme; işaret/tür DB kısıtı; `REVERSAL` ile düzeltme)
+- [x] StockReservation (lot bazlı, tümü-ya-hiç, referans başına idempotent, süre sonu)
+- [x] FEFO aday tahsisi (en erken SKT → kabul zamanı → id)
+- [x] Kalite blokajı (pending/released/blocked, gerekçe + olay günlüğü, tüketimde `LOT_BLOCKED`)
+- [x] Eşzamanlılık ve uzlaştırma testleri (gerçek paralel PostgreSQL bağlantılarıyla; `reconcile_inventory`)
 
-**Çıkış:** Mal kabulden kullanılabilir stok hesabına kadar hareketler izlenebilir; stok fazla rezerve edilemez.
+*Sandbox'ta doğrulandı (PostgreSQL 16); Docker ve GitHub Actions'ta henüz çalıştırılmadı.*
+
+**Çıkış:** Mal kabulden kullanılabilir stok hesabına kadar hareketler izlenebilir; stok fazla rezerve edilemez. *(Backend için karşılandı; kanıt: `inventory/tests/test_concurrency.py`.)*
 
 ## Faz 3 — Sipariş ve müşteri web'i
 - [ ] Order ve OrderLine
