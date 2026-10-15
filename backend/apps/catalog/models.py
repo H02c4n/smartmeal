@@ -231,3 +231,72 @@ class Product(CatalogItem):
     def save(self, *args, **kwargs):
         self.currency = normalize_currency(self.currency)
         super().save(*args, **kwargs)
+
+
+ALLERGEN_CODE_PATTERN = r"^[a-z][a-z0-9_]{1,31}$"
+
+
+class Allergen(UUIDTimestampedModel):
+    """Allergen reference entry (02_DATA_MODEL §3, ADR-012).
+
+    Deliberately NOT seeded by migration: which allergens must be declared depends on the
+    country and products served (05 §4), so the list is maintained by the business. ``code``
+    is immutable after creation; rows are never deleted, only deactivated.
+    """
+
+    code = models.CharField(max_length=32, unique=True)
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "catalog_allergen"
+        ordering = ["code"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(code__regex=ALLERGEN_CODE_PATTERN),
+                name="catalog_allergen_code_format",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.code} — {self.name}"
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.strip().lower() if isinstance(self.code, str) else self.code
+        if not self._state.adding:
+            stored = type(self).objects.filter(pk=self.pk).values_list("code", flat=True).first()
+            if stored is not None and stored != self.code:
+                raise ImmutableFieldError("code cannot be changed after creation.")
+        super().save(*args, **kwargs)
+
+
+class IngredientAllergen(UUIDTimestampedModel):
+    """Declares that an ingredient contains, or may contain traces of, an allergen."""
+
+    class Presence(models.TextChoices):
+        CONTAINS = "contains", "Contains"
+        MAY_CONTAIN = "may_contain", "May contain"
+
+    ingredient = models.ForeignKey(
+        Ingredient, on_delete=models.PROTECT, related_name="allergen_links"
+    )
+    allergen = models.ForeignKey(
+        Allergen, on_delete=models.PROTECT, related_name="ingredient_links"
+    )
+    presence = models.CharField(max_length=16, choices=Presence.choices)
+
+    class Meta:
+        db_table = "catalog_ingredient_allergen"
+        ordering = ["ingredient__sku", "allergen__code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ingredient", "allergen"], name="catalog_ingredient_allergen_unique"
+            ),
+            models.CheckConstraint(
+                condition=Q(presence__in=["contains", "may_contain"]),
+                name="catalog_ingredient_allergen_presence_valid",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.ingredient_id}: {self.presence} {self.allergen_id}"

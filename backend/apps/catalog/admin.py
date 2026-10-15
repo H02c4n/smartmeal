@@ -7,7 +7,14 @@ migration).
 
 from django.contrib import admin
 
-from .models import Ingredient, IngredientUnitConversion, Product, Unit
+from .models import (
+    Allergen,
+    Ingredient,
+    IngredientAllergen,
+    IngredientUnitConversion,
+    Product,
+    Unit,
+)
 
 
 @admin.register(Unit)
@@ -31,6 +38,12 @@ class IngredientUnitConversionInline(admin.TabularInline):
     can_delete = False
 
 
+class IngredientAllergenInline(admin.TabularInline):
+    model = IngredientAllergen
+    extra = 0
+    can_delete = True
+
+
 class _CatalogItemAdmin(admin.ModelAdmin):
     search_fields = ("sku", "name")
     list_filter = ("is_active",)
@@ -50,9 +63,23 @@ class _CatalogItemAdmin(admin.ModelAdmin):
 class IngredientAdmin(_CatalogItemAdmin):
     list_display = ("sku", "name", "base_unit", "is_active")
     immutable_after_create = ("sku", "base_unit")
-    inlines = [IngredientUnitConversionInline]
+    inlines = [IngredientUnitConversionInline, IngredientAllergenInline]
 
 
 @admin.register(Product)
 class ProductAdmin(_CatalogItemAdmin):
     list_display = ("sku", "name", "price", "currency", "is_active")
+
+
+@admin.register(Allergen)
+class AllergenAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name")
+
+    def get_readonly_fields(self, request, obj=None):
+        base = ("id", "created_at", "updated_at")
+        return (*base, "code") if obj is not None else base
+
+    def has_delete_permission(self, request, obj=None):
+        return False

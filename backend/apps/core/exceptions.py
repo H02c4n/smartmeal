@@ -46,6 +46,9 @@ def api_exception_handler(exc, context):
         data = response.data
         detail = data.get("detail") if isinstance(data, dict) else None
         body["message"] = str(detail) if detail else "Request could not be processed."
+        extra = getattr(exc, "extra", None)
+        if extra:
+            body["details"] = extra
 
     response.data = {"error": body}
     return response

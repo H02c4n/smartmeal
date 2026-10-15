@@ -93,6 +93,29 @@ Bu dosyaya mimari etkisi olan kararlar eklenir. Bir karar değiştiğinde eski k
 - **Bilinen risk:** Bir `IngredientUnitConversion` değeri değişirse, o dönüşümü kullanan reçetelerin hesaplanan taban miktarı da değişir; onaylı reçete sürümlerinin geçmişi koruma ilkesiyle (00 §4.9) uyum için RecipeVersion onayında dönüşüm değerlerinin snapshot'lanması veya dönüşümlerin sürümlenmesi gerekecektir (RecipeLine görevinde karara bağlanmalı).
 - **Geri dönüş planı:** Henüz üretim verisi yok; model/app yerleşimini şimdi değiştirmek ucuz, `Ingredient`'a bağlı tablolar (RecipeLine, Lot) gelince maliyetlidir.
 
+## ADR-012 — Reçete sürümleri, alerjen, tedarik ve stok (Faz 1 tamamlayıcıları + Faz 2)
+- **Tarih:** 2026-10-14
+- **Durum:** Önerildi (uygulama sandbox'ta test edildi; onay bekliyor)
+- **Bağlam:** Faz 1'in kalan işleri (RecipeVersion/RecipeLine, alerjen) ve Faz 2 (tedarik, lot, stok defteri, rezervasyon, FEFO, kalite blokajı) için 02 §4'te açık bırakılmış seçimler (rezervasyon granülaritesi, tesis, idempotency, izin modeli) karara bağlanmalıydı. 00 §8'deki ürün kararları (rezervasyon süresi, tesis sayısı) hâlâ açık olduğundan kararlar **geri alınabilir** tutuldu.
+- **Karar:**
+  1. **Yeni app'ler:** `recipes`, `purchasing`, `inventory` (00 §5 listesindeki adlarla). Bağımlılık: `purchasing → inventory → catalog`, `recipes → catalog`; `inventory` → `purchasing` yalnızca FK referansıyla (içe aktarma yok).
+  2. **Reçete yaşam döngüsü:** `draft → approved → retired`; ürün başına en çok bir `approved` (kısmi benzersiz indeks); yeni sürümü onaylamak eskisini emekli eder. **Onayda satır miktarları taban birime dondurulur** (ADR-011 riskinin çözümü): `IngredientUnitConversion` sonradan değişse de onaylı reçete değişmez. Fire formülü ADR-011 §6 ile uygulandı: `brüt = net ÷ (1 − fire)`, ham net'ten tek yuvarlama.
+  3. **Alerjen:** `Allergen` + `IngredientAllergen` (`contains`/`may_contain`); **tohumlanmaz** (yasal liste ülkeye göre; 05 §4). Reçete özeti türetilir, yasal etiket değildir; pasif alerjen mevcut reçetelerden gizlenmez.
+  4. **Stok miktarı taban birimde.** Siparişler/kabuller her birimde girilebilir, servis sınırında dönüştürülür; stok aritmetiği yalnızca taban birimde.
+  5. **Defter + projeksiyon:** `StockMovement` yalnızca-ekleme; `InventoryLot.on_hand/reserved` projeksiyon, DB CHECK ile korunur (`reserved ≤ on_hand`, negatif yok). Uzlaştırma: `selectors.reconcile()` ve `reconcile_inventory` komutu.
+  6. **Rezervasyon lot bazlıdır** (02 §4'teki iki seçenekten); FEFO: en erken SKT → kabul zamanı → id. Tümü-ya-hiç. (lot, referans) için tek aktif kayıt + (tüketici, malzeme) advisory kilidi ⇒ tekrar güvenli. Rezervasyon **süresi** ürün kararı olmadığı için isteğe bağlı `expires_at`; süresi dolanları bırakan `release_expired_reservations` komutu var, **zamanlayıcı yok** (Celery henüz eklenmedi).
+  7. **Kalite:** kabul edilen lot `pending`; `released`/`blocked` yalnızca gerekçeyle ve olay günlüğüne yazılarak değişir; tüketim yalnızca released + SKT geçmemiş lottan (`LOT_BLOCKED`). Bloke lotun mevcut rezervasyonu kalır ama tüketilemez; serbest bırakılabilir.
+  8. **Tesis yok:** tek tesis varsayıldı (`site_id` eklenmedi). Çoklu tesis kararı gelirse lot/rezervasyon/PO'ya migration ile eklenir.
+  9. **Idempotency (`core.IdempotencyRecord`):** `Idempotency-Key` başlığı; (scope, key, actor) benzersiz; kayıt işlemle aynı transaction'da, 7 gün saklanır; aynı anahtar + farklı gövde ⇒ 409. Mal kabul ve stok düzeltmede **zorunlu**. `core`'un "tablosuz" kuralı bu tek tablo için bilinçli olarak gevşetildi (test güncellendi).
+  10. **Geçici izin modeli:** `IsBackOfficeStaff` (`is_staff`) + 05 §1'in "özel izin" işlemleri için Django model izinleri (`inventory.adjust_stock/release_lot/block_lot`, `purchasing.reverse_goodsreceipt`). ADR-009 ile gerilim bilinçli ve geçici; `RoleAssignment` ile değişecek.
+  11. **Mal kabul toleransı:** satır başına sipariş miktarının %10 üstü reddedilir (`PO_OVER_RECEIPT_TOLERANCE`). Bu bir **ürün varsayımıdır**, onay gerekir.
+  12. **Hata kodları:** `INVALID_STATE_TRANSITION`, `INSUFFICIENT_STOCK`, `LOT_BLOCKED`, `IDEMPOTENCY_CONFLICT`, `CONFLICT` — hepsi 409, 03 §2 ile uyumlu; `details` ile sayısal bağlam taşıyabilir.
+- **Alternatifler:** malzeme bazlı rezervasyon (izlenebilirlik sonraya kalır); stoku bakiye tablosu yerine yalnızca defterden toplamak (okuma maliyeti); tesis modelini baştan eklemek; idempotency için yanıt gövdesi saklamak (kaynak referansı seçildi: yeniden oynatma güncel durumu döner).
+- **Etkilenen modüller/dosyalar:** `apps/{recipes,purchasing,inventory}/*`, `apps/catalog` (alerjen), `apps/core` (`api_errors`, `idempotency`, `permissions`, `serializers`, `IdempotencyRecord`), `config/settings/base.py`, `config/urls.py`, `docs/architecture/{01,02,03,06,07,08}`, `README.md`.
+- **Migration/API etkisi:** `catalog.0003_allergens`, `core.0001_idempotency`, `recipes.0001_initial`, `purchasing.0001_initial`, `inventory.0001_initial`, `inventory.0002_initial`. Yeni endpoint'ler; mevcut Faz 1 sözleşmesi bozulmadı. Sandbox'ta boş veritabanına ileri-geri doğrulandı.
+- **Bilinen riskler:** (a) `reserve_stock` tüm adayları kilitler — ~600 sipariş/hafta için yeterli, yük testiyle doğrulanmadı; (b) rezervasyon süresi için zamanlayıcı yok; (c) `AuditEvent` yok, yalnızca `LotQualityEvent` ve defter; (d) reçete onayı yetkisi hâlâ `is_staff`; (e) `waste_factor` tek değer, adımlı fire yok.
+- **Geri dönüş planı:** Henüz üretim verisi yok; tablolar boşken app yerleşimi/tesis kararı ucuz değişir. Tesis modeli sonradan eklenebilir (nullable FK → doldur → zorunlu).
+
 ## Yeni karar şablonu
 
 ### ADR-XXX — Kısa başlık

@@ -38,7 +38,10 @@ def test_uuid_base_model_is_abstract_with_uuid_pk():
 
 
 @pytest.mark.django_db
-def test_core_has_no_tables_of_its_own():
+def test_core_only_owns_the_idempotency_table():
+    """Core stays infrastructure-only; the single table is the shared idempotency store
+    (ADR-012). Business tables belong to their own modules."""
     from django.apps import apps
 
-    assert list(apps.get_app_config("core").get_models()) == []
+    names = {model.__name__ for model in apps.get_app_config("core").get_models()}
+    assert names == {"IdempotencyRecord"}

@@ -14,9 +14,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from . import selectors, services
-from .models import Ingredient, Product, Unit
+from .models import Allergen, Ingredient, Product, Unit
 from .permissions import IsCatalogAdmin
 from .serializers import (
+    AllergenCreateSerializer,
+    AllergenSerializer,
+    AllergenUpdateSerializer,
+    IngredientAllergenSerializer,
+    IngredientAllergenSetSerializer,
     IngredientCreateSerializer,
     IngredientSerializer,
     IngredientUpdateSerializer,
@@ -162,3 +167,64 @@ class AdminIngredientViewSet(
     def deactivate(self, request, pk=None):
         ingredient = services.set_ingredient_active(self.get_object(), False)
         return Response(IngredientSerializer(ingredient).data)
+
+    @extend_schema(responses={200: IngredientAllergenSerializer(many=True)})
+    @action(detail=True, methods=["get", "put"], url_path="allergens")
+    def allergens(self, request, pk=None):
+        """GET: the declared allergens. PUT: replace the whole declaration atomically."""
+        ingredient = self.get_object()
+        if request.method == "PUT":
+            serializer = IngredientAllergenSetSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            links = services.set_ingredient_allergens(
+                ingredient,
+                [(e["allergen"], e["presence"]) for e in serializer.validated_data["allergens"]],
+            )
+        else:
+            links = selectors.ingredient_allergen_links(ingredient)
+        return Response(IngredientAllergenSerializer(links, many=True).data)
+
+
+# --- Admin: allergens -----------------------------------------------------------------------
+@extend_schema_view(list=extend_schema(parameters=[IS_ACTIVE_PARAM]))
+class AdminAllergenViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
+    permission_classes = [IsCatalogAdmin]
+    serializer_class = AllergenSerializer
+
+    def get_queryset(self):
+        if _is_schema_generation(self):
+            return Allergen.objects.none()
+        if self.action == "list":
+            return selectors.allergens(is_active=_parse_is_active(self.request))
+        return Allergen.objects.all()
+
+    @extend_schema(request=AllergenCreateSerializer, responses={201: AllergenSerializer})
+    def create(self, request):
+        serializer = AllergenCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        allergen = services.create_allergen(**serializer.validated_data)
+        return Response(AllergenSerializer(allergen).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(request=AllergenUpdateSerializer, responses={200: AllergenSerializer})
+    def partial_update(self, request, pk=None):
+        allergen = self.get_object()
+        serializer = AllergenUpdateSerializer(allergen, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        allergen = services.update_allergen(allergen, **serializer.validated_data)
+        return Response(AllergenSerializer(allergen).data)
+
+    @extend_schema(request=None, responses={200: AllergenSerializer})
+    @action(detail=True, methods=["post"])
+    def activate(self, request, pk=None):
+        return Response(
+            AllergenSerializer(services.set_allergen_active(self.get_object(), True)).data
+        )
+
+    @extend_schema(request=None, responses={200: AllergenSerializer})
+    @action(detail=True, methods=["post"])
+    def deactivate(self, request, pk=None):
+        return Response(
+            AllergenSerializer(services.set_allergen_active(self.get_object(), False)).data
+        )

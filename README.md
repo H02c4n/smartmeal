@@ -3,7 +3,7 @@
 Yemek siparişi, malzeme tedariki, üretim, kalite, paketleme ve teslimat yönetim sistemi.
 Mimari referans: [`docs/architecture/`](docs/architecture/) (başlangıç noktası: `00_PROJECT_MASTER.md`).
 
-**Durum:** Faz 0 (repo temeli). Backend iskeleti hazır; web/admin/mobil uygulamalar henüz yok.
+**Durum:** Faz 0–2 backend'i hazır (katalog, reçete, tedarik, stok); web/admin/mobil uygulamalar henüz yok. Ayrıntı: `docs/architecture/08_CURRENT_STATE.md`.
 
 ## Gereksinimler
 
@@ -55,6 +55,13 @@ Windows'ta `make` yoksa: `docker compose run --rm backend pytest` gibi doğrudan
 
 Windows'ta `127.0.0.1:5432` "izin yok" hatası verirse `.env` içinde `POSTGRES_HOST_PORT=55432` yapın (uygulama DB'ye Docker ağından bağlandığı için etkilenmez).
 
+## Stok bakım komutları
+
+```bash
+docker compose run --rm backend python manage.py reconcile_inventory           # lot bakiyeleri defterle tutarlı mı? (tutarsızsa hata koduyla çıkar)
+docker compose run --rm backend python manage.py release_expired_reservations  # süresi dolan rezervasyonları bırak (tekrarı güvenli; zamanlayıcı henüz yok)
+```
+
 ## Günlük komutlar
 
 `make help` tüm hedefleri listeler. Sık kullanılanlar: `up`, `down`, `logs`, `migrate`, `makemigrations`,
@@ -67,8 +74,12 @@ smartmeal/
 ├── backend/                  Django + DRF modüler monolit
 │   ├── config/               settings (base/local/test), urls, wsgi/asgi
 │   ├── apps/                 İş alanı modülleri (Django apps)
-│   │   ├── core/             Ortak altyapı: UUID taban model, request_id, hata zarfı, health
-│   │   └── accounts/         Custom User modeli (+ ileride RoleAssignment)
+│   │   ├── core/             Ortak altyapı: UUID taban model, request_id, hata zarfı, idempotency, health
+│   │   ├── accounts/         Custom User modeli (+ ileride RoleAssignment)
+│   │   ├── catalog/          Birim sözlüğü, malzeme, ürün, alerjen
+│   │   ├── recipes/          Reçete sürümleri (taslak → onaylı → emekli), fire, ihtiyaç hesabı
+│   │   ├── purchasing/       Tedarikçi, satın alma siparişi, mal kabul
+│   │   └── inventory/        Lot, stok defteri, rezervasyon (FEFO), kalite blokajı
 │   ├── conftest.py           Ortak pytest fixture'ları
 │   ├── pyproject.toml        Bağımlılıklar, pytest ve ruff yapılandırması
 │   ├── uv.lock               Sabitlenmiş bağımlılık sürümleri (commit edilir)

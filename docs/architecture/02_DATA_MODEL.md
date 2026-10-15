@@ -39,11 +39,14 @@ Roller örnek: `CUSTOMER`, `ADMIN`, `PLANNER`, `PURCHASING`, `PRODUCTION`, `QUAL
 ### `Product`
 `id`, `sku`, `name`, `description`, `price` (`NUMERIC(12,2)`, `>= 0`), `currency` (3 harf `^[A-Z]{3}$`, varsayılan yok, ISO 4217 listesiyle eşleştirilmez), `is_active`. SKU kuralları Ingredient ile aynıdır. Vergi modellenmez (açık karar, 00 §8). `allergen_information` veya ilişkili alerjen kayıtları ayrı görevde gelir; bu modelde şimdilik alan yoktur.
 
-### `RecipeVersion`
-`id`, `product_id`, `version_number`, `yield_quantity`, `yield_unit`, `status`, `effective_from`, `effective_to`, `approved_by`.
+### `Allergen` ve `IngredientAllergen` (ADR-012)
+`Allergen`: `id`, `code` (`^[a-z][a-z0-9_]{1,31}$`, benzersiz, değişmez), `name`, `is_active`. **Migration ile tohumlanmaz**: hangi alerjenlerin beyan edileceği ülkeye/ürüne göre değişir (05 §4); liste işletme tarafından yönetilir. `IngredientAllergen`: `ingredient`, `allergen`, `presence` (`contains` | `may_contain`); (`ingredient`, `allergen`) benzersiz. Malzeme beyanı API'de PUT ile bütün olarak değiştirilir. Reçete alerjen özeti, malzeme beyanlarından türetilir (`contains` > `may_contain`); pasifleştirilen alerjen mevcut reçetelerde **görünmeye devam eder**. Bu özet yasal etiket değildir.
+
+### `RecipeVersion` (ADR-012)
+`id`, `product`, `version_number` (ürün başına 1, 2, 3…; yeniden kullanılmaz), `yield_quantity` (`> 0`), `yield_unit`, `status` (`draft` → `approved` → `retired`), `effective_from`, `effective_to`, `approved_at`, `approved_by`, `retired_at`, `retired_by`. Ürün başına **aynı anda en çok bir `approved`** sürüm (kısmi benzersiz indeks). Yeni sürümü onaylamak eskisini aynı transaction'da `retired` yapar. `draft` dışında verim alanları ve satırlar değişmez (model `save()`/`delete()` korumaları + servis; `QuerySet.update()` bunları aşar, bu yüzden yazma yalnızca `recipes.services` üzerinden).
 
 ### `RecipeLine`
-`id`, `recipe_version_id`, `ingredient_id`, `quantity`, `unit`, `waste_factor` (iş kuralı kesinleşirse).
+`id`, `recipe_version`, `ingredient`, `quantity` (`> 0`, net), `unit`, `waste_factor` (`0 ≤ w < 1`, varsayılan 0), `net_base_quantity`, `gross_base_quantity`. Son ikisi taslakta `NULL`; **onayda bir kez** malzemenin taban birimine hesaplanıp dondurulur (`gross = net ÷ (1 − waste)`, ham net'ten tek yuvarlama). Böylece `IngredientUnitConversion` sonradan değişse de onaylı reçetenin anlamı değişmez (ADR-011 riski kapatıldı).
 
 Reçete sürümleri yayımlandıktan sonra geçmiş sipariş/üretim kayıtları için değiştirilmemelidir; değişiklik yeni sürüm oluşturur.
 
@@ -51,42 +54,48 @@ Reçete sürümleri yayımlandıktan sonra geçmiş sipariş/üretim kayıtları
 
 ## 4. Tedarik ve stok
 
+> **Faz 2 uygulandı (ADR-012, "Önerildi").** Aşağıdaki alanlar koddaki gerçek modellerdir. Tüm stok miktarları malzemenin **taban biriminde** tutulur; girişler servis sınırında `convert_quantity` ile dönüştürülür. Tesis (`site_id`) **yoktur**: tesis sayısı açık karardır (00 §8), tek tesis varsayıldı; çoklu tesis gerekirse migration ile eklenir.
+
 ### `Supplier`
-`id`, `name`, `contact_details`, `status`.
+`id`, `name` (büyük/küçük harf duyarsız benzersiz), `contact_details`, `is_active`. Silinmez; pasife alınır.
 
 ### `PurchaseOrder`
-`id`, `supplier_id`, `status`, `ordered_at`, `expected_at`, `created_by`.
+`id`, `po_number` (benzersiz, üretilir), `supplier`, `status` (`draft` → `submitted` → `partially_received` → `received`; `draft`/`submitted` → `cancelled`), `currency`, `ordered_at`, `expected_at`, `created_by`, `cancelled_at`. Yalnızca `draft` düzenlenir. Kısmen/tamamen alınmış sipariş iptal edilemez.
 
 ### `PurchaseOrderLine`
-`id`, `purchase_order_id`, `ingredient_id`, `ordered_quantity`, `unit`, `unit_cost`.
+`id`, `purchase_order`, `ingredient`, `ordered_quantity`, `unit`, `ordered_base_quantity`, `received_base_quantity`, `unit_cost`. (sipariş, malzeme) benzersiz.
 
 ### `GoodsReceipt`
-`id`, `purchase_order_id`, `received_at`, `received_by`, `status`.
+`id`, `purchase_order`, `status` (`posted` | `reversed`), `received_at`, `received_by`, `reversed_at/by`, `reversal_reason`. Atomik: satırlar, lotlar, `RECEIPT` hareketleri ve sipariş miktarları birlikte yazılır. Satır başına fazla teslimat toleransı %10 (`PO_OVER_RECEIPT_TOLERANCE`, **geçici varsayım**).
 
 ### `GoodsReceiptLine`
-`id`, `goods_receipt_id`, `ingredient_id`, `received_quantity`, `unit`, `supplier_lot_code`, `expiry_date`, `quality_status`.
+`id`, `goods_receipt`, `po_line`, `ingredient`, `received_quantity`, `unit`, `received_base_quantity`, `supplier_lot_code` (zorunlu), `expiry_date` (zorunlu, geçmiş olamaz).
 
 ### `InventoryLot`
-`id`, `ingredient_id`, `supplier_id`, `supplier_lot_code`, `internal_lot_code`, `received_at`, `expiry_date`, `quality_status`, `site_id`.
+`id`, `ingredient`, `supplier`, `receipt_line` (1-1), `supplier_lot_code`, `internal_lot_code` (benzersiz), `received_at`, `expiry_date`, `quality_status` (`pending` → `released` ⇄ `blocked`), `initial_quantity`, `on_hand`, `reserved`. `on_hand`/`reserved` projeksiyondur ve DB kısıtlarıyla korunur: `on_hand ≥ 0`, `reserved ≥ 0`, **`reserved ≤ on_hand`**. Tedarikçi lot kodu tedarikçiler arasında tekrar edebilir (benzersiz olan dahili koddur). Kabul edilen lot `pending` başlar (05 §4).
 
-Lot kodunun benzersizliği tedarikçi/tesis kapsamına göre tanımlanmalıdır; her tedarikçi aynı lot kodunu kullanabilir.
+### `LotQualityEvent`
+Kalite durum değişikliklerinin yalnızca-ekleme günlüğü (`lot`, `from_status`, `to_status`, `reason` zorunlu, `actor`). `audit` modülü gelene kadar yerini tutar.
 
 ### `StockMovement`
-`id`, `lot_id`, `movement_type`, `quantity_delta`, `unit`, `reference_type`, `reference_id`, `occurred_at`, `actor_id`, `reason`.
-
-Hareket türleri örnek: `RECEIPT`, `CONSUMPTION`, `ADJUSTMENT`, `WASTE`, `RETURN`, `REVERSAL`. Hareketin işareti ve yönü standartlaştırılır.
+`id`, `lot`, `movement_type` (`receipt`, `consumption`, `adjustment`, `waste`, `return`, `reversal`), `quantity_delta`, `unit`, `balance_after`, `reference_type`, `reference_id`, `occurred_at`, `actor`, `reason`, `reverses` (1-1, kendisine). **Yalnızca ekleme** (`save`/`delete` engelli). DB kısıtları: delta ≠ 0; işaret türe uygun (receipt/return +, consumption/waste −); `adjustment`/`waste`/`reversal` için gerekçe zorunlu; `reversal` ⇔ `reverses` dolu. Bir hareket yalnızca bir kez ters çevrilir; `reversal` ters çevrilemez.
 
 ### `StockReservation`
-`id`, `order_id`, `ingredient_id` veya `lot_id`, `quantity`, `unit`, `status`, `expires_at`, `created_at`, `released_at`.
+`id`, `lot`, `quantity`, `status` (`active` | `released` | `consumed`), `reference_type`, `reference_id` (tüketici: sipariş/üretim; FK yok çünkü tablolar henüz yok), `expires_at`, `released_at`, `consumed_at`, `consumed_quantity`. **Lot bazlı** (FEFO ve izlenebilirlik için). (lot, referans) için tek aktif kayıt (kısmi benzersiz indeks) — aynı isteği tekrarlamak yeni kayıt açmaz. Bir tüketici bir malzeme için birden fazla lottan satır alabilir.
 
-Rezervasyon malzeme bazında veya lot bazında tutulabilir. Lot bazlı rezervasyon FIFO/FEFO ve izlenebilirliği kolaylaştırır; seçilen yaklaşımın tüm kodda tutarlı olması gerekir.
+### `IdempotencyRecord` (`core`)
+`scope`, `key`, `actor`, `request_hash`, `resource_id`, `expires_at` (7 gün). (scope, key, actor) benzersiz. Aynı anahtar + aynı gövde → ilk sonuç (200); aynı anahtar + farklı gövde → `IDEMPOTENCY_CONFLICT`. Kayıt, işlemle **aynı transaction'da** yazılır: başarısız istek kayıt bırakmaz, yeniden denenebilir.
 
-### Stok hesapları
-- Fiziksel miktar, stok hareketlerinden veya güvenilir bir bakiye projeksiyonundan hesaplanır.
-- Rezerve miktar aktif rezervasyonlardan hesaplanır.
-- Bloke lotlar kullanılabilir miktara dahil edilmez.
-- Performans için bakiye tablosu/projeksiyonu kullanılacaksa hareket defteriyle uzlaştırma testi bulunur.
-- Son kullanma tarihine göre tahsis için FEFO (ilk önce tarihi en yakın lot) varsayılan adaydır; iş/kalite kurallarıyla doğrulanmalıdır.
+### Stok hesapları (uygulanan tanım — tüm modüllerde `inventory.selectors.stock_levels`)
+Malzeme başına, taban birimde:
+- `physical = Σ on_hand` (pending/blocked/süresi dolmuş lotlar dahil)
+- `reserved = Σ reserved`
+- `available = Σ (on_hand − reserved)` yalnızca **released ve SKT'si geçmemiş** lotlarda (SKT günü hâlâ kullanılabilir)
+- `unavailable = Σ (on_hand − reserved)` pending, blocked veya süresi dolmuş lotlarda
+- Değişmez: `physical = reserved + available + unavailable`.
+- `on_hand` ve `reserved` projeksiyondur; `selectors.reconcile()` / `manage.py reconcile_inventory` bunları hareket defteri ve aktif rezervasyonlarla karşılaştırır (tutarsızlıkta hata kodu ile çıkar).
+- **FEFO:** rezervasyon yalnızca released, süresi dolmamış ve boş miktarı olan lotlardan, en erken SKT → kabul zamanı → id sırasıyla tahsis edilir. `use_by_on_or_after` ile asgari raf ömrü payı istenebilir. İş/kalite politikasıyla (gerçek raf ömrü kuralları) hâlâ doğrulanmalıdır.
+- **Kilitleme:** değiştirilen her lot `SELECT … FOR UPDATE` ile kilitlenir; birden çok lot birincil anahtar sırasıyla kilitlenir (kilitlenme olmaz). Rezervasyon ayrıca (tüketici, malzeme) başına `pg_advisory_xact_lock` alır; aynı isteğin paralel tekrarları tek rezervasyon üretir.
 
 ## 5. Sipariş
 

@@ -58,6 +58,11 @@ Ortak kurallar (aşağıdaki §7 maddeleri için):
 - **Ingredient request:** `POST` gövdesi `{sku, name, base_unit}`; `base_unit` birim `code`'udur (`g`, `ml`, `pcs`), taban birim olmalıdır. `PATCH` yalnızca `name` değiştirir.
 - **Henüz API'si yok:** `IngredientUnitConversion` yönetimi (şimdilik Django admin ve `catalog.services.create_unit_conversion`).
 
+**Faz 1 tamamlayıcıları (uygulandı; ADR-012).** Hepsi geçici `IsCatalogAdmin` (`is_staff`) ister.
+- Alerjen: `GET|POST /admin/allergens/`, `GET|PATCH /admin/allergens/{id}/`, `POST …/activate/`, `POST …/deactivate/` (`code` değişmez); `GET|PUT /admin/ingredients/{id}/allergens/` (PUT gövdesi `{"allergens":[{"allergen":"gluten","presence":"contains"}]}` beyanı bütün olarak değiştirir, boş liste temizler; pasif alerjen yeni eklenemez).
+- Reçete: `GET|POST /admin/recipe-versions/` (filtre `product` SKU, `status`), `GET|PATCH /admin/recipe-versions/{id}/` (yalnızca taslak; `lines` verilirse satırların tamamı değişir), `POST …/approve/`, `POST …/retire/`, `GET …/requirements/?quantity=&unit=` (taban birimde net/brüt ihtiyaç). `status` düz gövdeyle yazılamaz. `GET` ayrıntısı `lines` ve türetilmiş `allergens` içerir.
+- Hatalar: onaylı/emekli sürümü düzenleme veya yanlış durumdan geçiş `409 INVALID_STATE_TRANSITION`; satırsız onay, pasif malzeme, dönüştürülemeyen birim `400 VALIDATION_ERROR`.
+
 ### Sipariş
 - `POST /orders/`
 - `GET /orders/`
@@ -71,6 +76,26 @@ Ortak kurallar (aşağıdaki §7 maddeleri için):
 - `POST /purchase-orders/{id}/submit/`
 - `POST /goods-receipts/`
 - `POST /inventory/adjustments/`
+
+**Faz 2 uygulaması (ADR-012, "Önerildi").** Yukarıdaki altı endpoint ve aşağıdakiler uygulandı. Yetki **geçicidir** (ADR-009/010): hepsi `is_staff`; 05 §1'in "özel izin" dediği işlemler ayrıca Django izni ister (süper kullanıcı hepsine sahiptir). `RoleAssignment` gelince rol tabanlı izinle değiştirilecek.
+
+| Endpoint | Not |
+|---|---|
+| `GET|POST /suppliers/`, `GET|PATCH /suppliers/{id}/`, `POST …/activate/`, `…/deactivate/` | `is_active` yalnızca eylemlerle; DELETE yok |
+| `GET|POST /purchase-orders/`, `GET|PATCH /purchase-orders/{id}/` | PATCH yalnızca `draft`; `lines` bütün olarak değişir; filtre `status` |
+| `POST /purchase-orders/{id}/submit/`, `…/cancel/` | İdempotent; alınmış sipariş iptal edilemez (409) |
+| `GET|POST /goods-receipts/`, `GET /goods-receipts/{id}/` | **`Idempotency-Key` zorunlu**; ilk istek 201, tekrar 200 (aynı gövde), farklı gövde 409 `IDEMPOTENCY_CONFLICT` |
+| `POST /goods-receipts/{id}/reverse/` | İzin `purchasing.reverse_goodsreceipt`; gövde `{"reason"}`; stoğa dokunulmuşsa 409 `CONFLICT`; idempotent |
+| `GET /inventory/balances/` | Malzeme başına `physical/reserved/available/unavailable` (02 §4 tanımı), taban birimde |
+| `GET /inventory/lots/`, `GET …/{id}/` | Filtre `ingredient`, `quality_status`, `has_stock`; SKT'ye göre sıralı |
+| `POST /inventory/lots/{id}/release/`, `…/block/` | İzin `inventory.release_lot` / `inventory.block_lot`; gerekçe zorunlu; idempotent; kalite olay günlüğüne yazar |
+| `GET /inventory/movements/` | Salt okunur defter; filtre `lot`, `movement_type` |
+| `POST /inventory/movements/{id}/reverse/` | İzin `inventory.adjust_stock`; bir hareket bir kez ters çevrilir |
+| `POST /inventory/adjustments/` | İzin `inventory.adjust_stock`; **`Idempotency-Key` zorunlu**; `quantity` işaretli, `reason` zorunlu, `movement_type` `adjustment` (varsayılan) veya `waste` |
+| `GET|POST /inventory/reservations/` | POST: tümü-ya-hiç FEFO rezervasyon; (referans, malzeme) başına idempotent — tekrar 200 aynı kayıtlar, farklı miktar 409 `IDEMPOTENCY_CONFLICT`; yetersiz stok 409 `INSUFFICIENT_STOCK` (`details`: istenen/mevcut) |
+| `POST /inventory/reservations/{id}/release/`, `…/consume/` | Release idempotent; consume `{quantity?}` kısmi tüketimde kalanı serbest bırakır; bloke/süresi dolmuş lot 409 `LOT_BLOCKED`; tüketilmiş kayıt serbest bırakılamaz |
+
+Miktarlar ondalık string (`"2000.0000"`), stok miktarları malzemenin taban biriminde; girişte herhangi uyumlu birim kabul edilir. Fazla teslimat (sipariş + %10 üstü) `409 CONFLICT`. Kimliksiz `AUTHENTICATION_REQUIRED`, yetkisiz `PERMISSION_DENIED`.
 
 ### Planlama ve üretim
 - `POST /production-plans/`
