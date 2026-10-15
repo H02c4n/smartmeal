@@ -3,8 +3,9 @@
 > Bu dosya her çalışma oturumunun sonunda güncellenmelidir. Gerçek kod ve test durumu doğrulanmadan tamamlanmış gibi işaretlenmemelidir.
 
 ## Son güncelleme
-- Tarih: 2026-10-14
-- Güncelleyen: Faz 1 tamamlayıcıları (alerjen, reçete) + Faz 2 oturumu (tedarik ve stok), backend
+- Tarih: 2026-10-15
+- Güncelleyen: Doğrulama sonrası karar oturumu (ADR-007…012 onayı, ADR-013 kimlik/rol kararı); kod değişmedi
+- Önceki oturum (2026-10-14): Faz 1 tamamlayıcıları (alerjen, reçete) + Faz 2 (tedarik ve stok), backend
 
 ## Genel durum
 - [x] Faz 0 altyapısı (değişmedi)
@@ -13,13 +14,14 @@
 - [x] `purchasing`: Supplier, PurchaseOrder(+Line), GoodsReceipt(+Line) (bu oturum)
 - [x] `inventory`: InventoryLot, StockMovement, StockReservation, LotQualityEvent, FEFO, kalite blokajı, uzlaştırma (bu oturum)
 - [x] `core`: ortak 409 hata sınıfları, `Idempotency-Key` altyapısı, izin yardımcıları (bu oturum)
-- [ ] **Hiçbir Faz 1/Faz 2 değişikliği kullanıcının Docker ortamında veya GitHub Actions'ta çalıştırılmadı.** Aşağıdaki sonuçlar sandbox'tandır.
-- [ ] ADR-007…011 ve yeni **ADR-012 "Önerildi"**; onay bekliyor
+- [x] Faz 1/Faz 2 kodu kullanıcının Docker ortamında, testlerde ve GitHub Actions'ta çalıştırıldı; **kullanıcı sonucu başarılı olarak bildirdi** (2026-10-15). Ayrıntılı çıktılar bu oturumda görülmedi; aşağıdaki sayılar sandbox'tandır.
+- [x] ADR-007…012 **Onaylandı** (2026-10-15)
+- [x] ADR-013 (kimlik doğrulama ve roller) **Onaylandı**, **henüz uygulanmadı**
 
 ## Faz durumu
 - Faz 0: **Tamamlandı**
-- Faz 1: **Backend tamamlandı**; kalan tek madde **Next.js Admin temel ekranları** (henüz başlanmadı)
-- Faz 2: **Backend tamamlandı** (sandbox'ta doğrulandı); Docker/CI doğrulaması ve ADR-012 onayı bekliyor
+- Faz 1: **Backend tamamlandı**; kalan: kimlik ve roller (ADR-013), ardından **Next.js Admin temel ekranları**
+- Faz 2: **Backend tamamlandı** ve doğrulandı (sandbox + kullanıcı bildirimi: Docker/CI/test başarılı); ADR-012 onaylandı
 - Faz 3–7: Bekliyor
 
 ## Son tamamlanan görev
@@ -65,8 +67,8 @@ Yok. Sıradaki: bkz. "Sonraki görev".
 - Yeni izinler (`inventory.adjust_stock/release_lot/block_lot`, `purchasing.reverse_goodsreceipt`) migration ile oluşur; süper kullanıcı hepsine sahiptir, diğer personel için Django admin'den atanır.
 
 ## Açık sorunlar ve ürün kararları
-- **ADR-012 onayı** (özellikle: lot bazlı rezervasyon, tesis yok, %10 fazla-teslimat toleransı, `IdempotencyRecord`'un `core`'da olması). ADR-007…011 hâlâ onay bekliyor.
-- **Kimlik doğrulama (ADR-010) ve roller:** tüm yeni endpoint'ler geçici `is_staff` + Django model izinleri kullanıyor; `RoleAssignment` gelince değişmeli. Oturum kimlik doğrulamasında yazma istekleri CSRF ister.
+- ADR-007…012 onaylandı. Gözden geçirilecek varsayım: %10 fazla-teslimat toleransı (gerçek tedarikçi verisiyle).
+- **Kimlik doğrulama ve roller: karara bağlandı (ADR-013), uygulanmadı.** Tüm endpoint'ler hâlâ geçici `is_staff` + Django model izinleri kullanıyor. ADR-013: web için oturum çerezi + CSRF, mobil için token (Faz 6), `RoleAssignment` + koda sabit rol→izin eşlemesi, kimliksiz istek 401, giriş hız sınırı, personel MFA Faz 7 öncesi. Müşteri kaydı/e-posta doğrulama/telefon benzersizliği Faz 3 başında karara bağlanacak.
 - **Rezervasyon süresi** (00 §8): ürün kararı yok; `expires_at` isteğe bağlı, zamanlayıcı yok. Faz 3'te sipariş onayı ile birlikte netleşmeli (Celery/cron gerekebilir).
 - **Tesis sayısı** (00 §8): tek tesis varsayıldı.
 - **Fazla teslimat toleransı %10** geçici varsayım.
@@ -78,13 +80,13 @@ Yok. Sıradaki: bkz. "Sonraki görev".
 - Django admin: stok, reçete, PO ve mal kabul **salt okunur** (ledger/durum makinesini aşmasın diye); yalnızca tedarikçi ve alerjen/katalog kayıtları düzenlenebilir.
 
 ## Sonraki görev
-1. Kullanıcı ortamında doğrulama: `migrate`, `pytest`, lint, şema (yukarıdaki komutlar) ve GitHub Actions; ADR-007…012 kararı.
-2. Faz 1'in kalanı: **Next.js Admin temel ekranları** (katalog/reçete/alerjen/tedarik/stok). Ayrı bir görev olarak önce kimlik doğrulama stratejisi (ADR-010) ve `RoleAssignment` kararı gerekir.
-3. Faz 3: Order/OrderLine, fiyat snapshot'ı, durum makinesi, sipariş → `reserve_stock` entegrasyonu. Önce 00 §8'deki sipariş onayı/rezervasyon süresi kararı alınmalı.
+1. **Backend: kimlik ve roller (ADR-013)** — `accounts.RoleAssignment`, `POST /auth/login/`, `POST /auth/logout/`, `GET /me/`, giriş hız sınırı, kimliksiz isteklerde 401, rol→izin eşlemesinin tablo olarak yazılıp test edilmesi, `IsCatalogAdmin`/`IsBackOfficeStaff`/`staff_with_permission`'ın rol tabanlı hâlle değiştirilmesi (yalnızca bu sınıflar). Başlamadan önce rol→izin eşleme tablosu kısaca onaylanır.
+2. **Next.js Admin temel ekranları** (Faz 1'in kalanı): giriş, katalog/malzeme/alerjen, reçete, tedarikçi/sipariş/mal kabul, stok/lot. İstemci tipleri OpenAPI şemasından üretilir (09 §4). `web/` veya `admin/` klasörü ve araç seçimi (paket yöneticisi, UI kütüphanesi) ayrı bir kısa ADR gerektirir.
+3. Faz 3: Order/OrderLine, fiyat snapshot'ı, durum makinesi, sipariş → `reserve_stock` entegrasyonu. Önce 00 §8'deki sipariş onayı/rezervasyon süresi ve müşteri kaydı kararları alınmalı.
 
 ## Oturum sonu özeti
 - Tamamlanan: alerjen, reçete (recipes), tedarik (purchasing), stok (inventory), ortak idempotency/hata altyapısı, belgeler
 - Eklenen migration'lar: `catalog.0003_allergens`, `core.0001_idempotency`, `recipes.0001_initial`, `purchasing.0001_initial`, `inventory.0001_initial`, `inventory.0002_initial`
 - Açık hatalar: bilinen yok; Docker/CI doğrulaması bekliyor
 - Bu oturumda yakalanıp düzeltilen gerçek hatalar: reçete satırı CHECK kısıtının NULL durumunu kaçırması; satır değiştirirken eski satırlarla benzersizlik çakışması
-- Sıradaki tek görev: Docker/CI doğrulaması + ADR-012 onayı, ardından Next.js Admin (Faz 1 kalanı)
+- Sıradaki tek görev: kimlik ve roller (ADR-013) backend uygulaması, ardından Next.js Admin

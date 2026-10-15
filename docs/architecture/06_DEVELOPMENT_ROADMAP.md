@@ -19,7 +19,8 @@ Süreler tahminidir; ekip boyutu, entegrasyonlar ve operasyonel gereksinimler ne
 - [x] Birim ve dönüşüm sözlüğü (`Unit`, `IngredientUnitConversion`, `convert_quantity`; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
 - [x] RecipeVersion ve RecipeLine (taslak → onaylı → emekli, onayda taban birim snapshot'ı, fire, ihtiyaç hesabı; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
 - [x] Alerjen bilgisi (`Allergen`, `IngredientAllergen`, reçete bazında türetilmiş özet; sandbox'ta test edildi)
-- [ ] Admin temel ekranları (Next.js — henüz başlanmadı; Faz 1'in tek açık maddesi)
+- [ ] Kimlik ve roller (ADR-013: oturum çerezi + `RoleAssignment`; Admin ekranlarının ön koşulu)
+- [ ] Admin temel ekranları (Next.js — henüz başlanmadı; kimlik ve roller bittikten sonra)
 - [x] Model ve API testleri (backend için; sandbox'ta çalıştırıldı)
 
 **Çıkış:** Ürün ve reçete sürümü yönetilir; reçete miktarları standart birimlerle hesaplanabilir. *(Backend karşılandı; Next.js Admin ekranları hariç.)*
