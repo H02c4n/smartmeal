@@ -34,6 +34,8 @@
 - `POST /auth/logout/`
 - `GET /me/`
 
+**Karar (ADR-013, onaylandı; henüz uygulanmadı):** web istemcileri sunucu tarafı oturum çerezi + CSRF kullanır (`login`, `logout`, `me`); `refresh` yalnızca mobil token akışı içindir (Faz 6). Kimliksiz istek 401 `AUTHENTICATION_REQUIRED` döner. Giriş denemesi hız sınırlıdır. Rol tabanlı izinler `RoleAssignment` ile gelir; o zamana kadar mevcut geçici `is_staff` + Django izinleri geçerlidir.
+
 ### Katalog ve reçete
 - `GET /products/`
 - `GET /products/{id}/`
@@ -77,7 +79,7 @@ Ortak kurallar (aşağıdaki §7 maddeleri için):
 - `POST /goods-receipts/`
 - `POST /inventory/adjustments/`
 
-**Faz 2 uygulaması (ADR-012, "Önerildi").** Yukarıdaki altı endpoint ve aşağıdakiler uygulandı. Yetki **geçicidir** (ADR-009/010): hepsi `is_staff`; 05 §1'in "özel izin" dediği işlemler ayrıca Django izni ister (süper kullanıcı hepsine sahiptir). `RoleAssignment` gelince rol tabanlı izinle değiştirilecek.
+**Faz 2 uygulaması (ADR-012, onaylandı).** Yukarıdaki altı endpoint ve aşağıdakiler uygulandı. Yetki **geçicidir** (ADR-009/010): hepsi `is_staff`; 05 §1'in "özel izin" dediği işlemler ayrıca Django izni ister (süper kullanıcı hepsine sahiptir). `RoleAssignment` gelince (ADR-013) rol tabanlı izinle değiştirilecek.
 
 | Endpoint | Not |
 |---|---|

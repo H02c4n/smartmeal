@@ -54,7 +54,7 @@ Reçete sürümleri yayımlandıktan sonra geçmiş sipariş/üretim kayıtları
 
 ## 4. Tedarik ve stok
 
-> **Faz 2 uygulandı (ADR-012, "Önerildi").** Aşağıdaki alanlar koddaki gerçek modellerdir. Tüm stok miktarları malzemenin **taban biriminde** tutulur; girişler servis sınırında `convert_quantity` ile dönüştürülür. Tesis (`site_id`) **yoktur**: tesis sayısı açık karardır (00 §8), tek tesis varsayıldı; çoklu tesis gerekirse migration ile eklenir.
+> **Faz 2 uygulandı (ADR-012, onaylandı).** Aşağıdaki alanlar koddaki gerçek modellerdir. Tüm stok miktarları malzemenin **taban biriminde** tutulur; girişler servis sınırında `convert_quantity` ile dönüştürülür. Tesis (`site_id`) **yoktur**: tesis sayısı açık karardır (00 §8), tek tesis varsayıldı; çoklu tesis gerekirse migration ile eklenir.
 
 ### `Supplier`
 `id`, `name` (büyük/küçük harf duyarsız benzersiz), `contact_details`, `is_active`. Silinmez; pasife alınır.

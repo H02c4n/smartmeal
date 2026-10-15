@@ -1,6 +1,6 @@
 """Catalog master data: units, ingredients, products (02_DATA_MODEL §3).
 
-Module placement (ADR-011 proposal): ``Ingredient`` lives here, not in ``inventory``; stock
+Module placement (ADR-011): ``Ingredient`` lives here, not in ``inventory``; stock
 models in ``inventory`` will reference ``catalog.Ingredient`` (dependency: inventory -> catalog).
 """
 

@@ -37,7 +37,7 @@ Bu dosyaya mimari etkisi olan kararlar eklenir. Bir karar değiştiğinde eski k
 
 ## ADR-007 — UUID birincil anahtar (domain modelleri)
 - **Tarih:** 2026-10-13
-- **Durum:** Önerildi (Faz 0 uygulaması; onay bekliyor)
+- **Durum:** Onaylandı (2026-10-15; ürün sahibi, Faz 0 uygulamasıyla birlikte; Docker ve CI doğrulaması kullanıcı tarafından bildirildi)
 - **Bağlam:** `02_DATA_MODEL.md` §1 "tercihen UUID, tüm projede tutarlı" diyor; karar verilmesi gerekiyordu.
 - **Karar:** Tüm SmartMeal domain modelleri `apps.core.models.UUIDTimestampedModel` (UUIDv4 `id`, `created_at`, `updated_at`) üzerinden türer. Django'nun kendi tabloları (Group, Permission vb.) `BigAutoField` kalır.
 - **Alternatifler:** BigAutoField; UUIDv7 (Python 3.12 standart kütüphanesinde yok).
@@ -48,7 +48,7 @@ Bu dosyaya mimari etkisi olan kararlar eklenir. Bir karar değiştiğinde eski k
 
 ## ADR-008 — Araç ve sürüm seçimleri
 - **Tarih:** 2026-10-13
-- **Durum:** Önerildi (Faz 0 uygulaması; onay bekliyor)
+- **Durum:** Onaylandı (2026-10-15; ürün sahibi, Faz 0 uygulamasıyla birlikte; Docker ve CI doğrulaması kullanıcı tarafından bildirildi)
 - **Karar:** Python 3.12; Django 5.2 LTS (`>=5.2,<5.3`); DRF; drf-spectacular (OpenAPI); psycopg 3 (binary); django-environ; PostgreSQL 16; paket yönetimi **uv** (`pyproject.toml` + `uv.lock`, CI'da `--frozen`); test **pytest + pytest-django**; lint/format **ruff**.
 - **Alternatifler:** Django 6.x (daha yeni, LTS değil); pip-tools/Poetry; black+flake8.
 - **Gerekçe:** LTS ile destek penceresi ve kararlılık; tek araçla lint+format; kilit dosyası ile tekrarlanabilir kurulum (00_PROJECT_MASTER §2 sürümlerin lockfile'a sabitlenmesini şart koşar).
@@ -57,7 +57,7 @@ Bu dosyaya mimari etkisi olan kararlar eklenir. Bir karar değiştiğinde eski k
 
 ## ADR-009 — Custom User modeli kapsamı
 - **Tarih:** 2026-10-13
-- **Durum:** Önerildi (Faz 0 uygulaması; onay bekliyor)
+- **Durum:** Onaylandı (2026-10-15; ürün sahibi, Faz 0 uygulamasıyla birlikte; Docker ve CI doğrulaması kullanıcı tarafından bildirildi)
 - **Karar:** `accounts.User`: UUID PK, `email` (giriş kimliği, benzersiz, **her zaman küçük harf** — manager/`save()` normalize eder, `CHECK (email = lower(email))` veritabanında zorlar), `phone` (opsiyonel, benzersiz değil), `is_active`, `is_staff`, `is_superuser`, `created_at`, `updated_at`. Ad/soyad ve iş rolleri **yoktur**; roller `RoleAssignment` ile ayrı görevde eklenir. `is_staff` yalnızca Django admin erişimidir; Django admin geliştirici aracıdır, ürün Admin'i Next.js'tir (ADR-003).
 - **Alternatifler:** Postgres `citext` (ek extension gerektirir); Lower() tabanlı UniqueConstraint (Django, USERNAME_FIELD için `unique=True` ister).
 - **Etkilenen dosyalar:** `apps/accounts/*`, `config/settings/base.py` (`AUTH_USER_MODEL`).
@@ -66,14 +66,14 @@ Bu dosyaya mimari etkisi olan kararlar eklenir. Bir karar değiştiğinde eski k
 
 ## ADR-010 — Hata zarfı ve request_id temel altyapıda
 - **Tarih:** 2026-10-13
-- **Durum:** Önerildi (Faz 0 uygulaması; onay bekliyor)
+- **Durum:** Onaylandı (2026-10-15; ürün sahibi, Faz 0 uygulamasıyla birlikte; Docker ve CI doğrulaması kullanıcı tarafından bildirildi)
 - **Karar:** `03_API_CONTRACTS.md` §1/§5 sözleşmesi baştan uygulanır: her hata `{"error": {"code","message","details?","request_id"}}`; `X-Request-ID` middleware'i (istemci değeri yalnızca `[A-Za-z0-9._-]{8,64}` ise kabul, aksi halde UUID üretilir), log kayıtlarına `request_id` eklenir. DRF varsayılan izni `IsAuthenticated` (varsayılan kapalı).
-- **Geçici nokta:** Kimlik doğrulama stratejisi (token/session) hâlâ açık karardır. `SessionAuthentication` **geçici yer tutucudur**; bu nedenle kimliksiz istek şimdilik 403 (`AUTHENTICATION_REQUIRED` koduyla) döner; token stratejisi seçilince 401 olacaktır. Ayrı ADR gerekir (Faz 3'ten önce, `/auth/*` endpoint'leriyle birlikte).
+- **Geçici nokta (ADR-013 ile karara bağlandı):** Kimlik doğrulama stratejisi (token/session) açıktı; ADR-013 seçti. `SessionAuthentication` **geçici yer tutucudur**; bu nedenle kimliksiz istek şimdilik 403 (`AUTHENTICATION_REQUIRED` koduyla) döner; token stratejisi seçilince 401 olacaktır. Ayrı ADR gerekir (Faz 3'ten önce, `/auth/*` endpoint'leriyle birlikte).
 - **Etkilenen dosyalar:** `apps/core/{middleware,exceptions,logging,request_id}.py`.
 
 ## ADR-011 — Katalog modülü: malzeme, ürün, birim sözlüğü ve miktar politikası
 - **Tarih:** 2026-10-14
-- **Durum:** Önerildi (Faz 1 uygulaması; onay bekliyor)
+- **Durum:** Onaylandı (2026-10-15; ürün sahibi; Docker ve CI doğrulaması kullanıcı tarafından bildirildi)
 - **Bağlam:** 01 §3 malzemeyi `inventory`'ye, 02 §3 `Ingredient`'ı "Katalog ve reçete" altına yerleştiriyordu; birim sözlüğünün sahibi tanımsızdı; 00 §8'de reçete birimi/dönüşüm/fire politikası açık karardı.
 - **Karar:**
   1. `Ingredient`, `Product`, `Unit`, `IngredientUnitConversion` `catalog` app'indedir. `inventory` (lot, hareket) ileride `catalog.Ingredient`'a bağlanır; bağımlılık yönü `inventory → catalog`, `recipes → catalog` (döngü yok). Yeni app açılmadı (00 §5 listesi değişmedi). 01 §3 tablosu buna göre not düşüldü.
@@ -95,7 +95,7 @@ Bu dosyaya mimari etkisi olan kararlar eklenir. Bir karar değiştiğinde eski k
 
 ## ADR-012 — Reçete sürümleri, alerjen, tedarik ve stok (Faz 1 tamamlayıcıları + Faz 2)
 - **Tarih:** 2026-10-14
-- **Durum:** Önerildi (uygulama sandbox'ta test edildi; onay bekliyor)
+- **Durum:** Onaylandı (2026-10-15; ürün sahibi; Docker ve CI doğrulaması kullanıcı tarafından bildirildi). Onay notu: lot bazlı rezervasyon, tek tesis ve %10 fazla teslimat toleransı olduğu gibi kabul edildi; tolerans gerçek tedarikçi verisiyle gözden geçirilecek (ürün varsayımı).
 - **Bağlam:** Faz 1'in kalan işleri (RecipeVersion/RecipeLine, alerjen) ve Faz 2 (tedarik, lot, stok defteri, rezervasyon, FEFO, kalite blokajı) için 02 §4'te açık bırakılmış seçimler (rezervasyon granülaritesi, tesis, idempotency, izin modeli) karara bağlanmalıydı. 00 §8'deki ürün kararları (rezervasyon süresi, tesis sayısı) hâlâ açık olduğundan kararlar **geri alınabilir** tutuldu.
 - **Karar:**
   1. **Yeni app'ler:** `recipes`, `purchasing`, `inventory` (00 §5 listesindeki adlarla). Bağımlılık: `purchasing → inventory → catalog`, `recipes → catalog`; `inventory` → `purchasing` yalnızca FK referansıyla (içe aktarma yok).
@@ -115,6 +115,24 @@ Bu dosyaya mimari etkisi olan kararlar eklenir. Bir karar değiştiğinde eski k
 - **Migration/API etkisi:** `catalog.0003_allergens`, `core.0001_idempotency`, `recipes.0001_initial`, `purchasing.0001_initial`, `inventory.0001_initial`, `inventory.0002_initial`. Yeni endpoint'ler; mevcut Faz 1 sözleşmesi bozulmadı. Sandbox'ta boş veritabanına ileri-geri doğrulandı.
 - **Bilinen riskler:** (a) `reserve_stock` tüm adayları kilitler — ~600 sipariş/hafta için yeterli, yük testiyle doğrulanmadı; (b) rezervasyon süresi için zamanlayıcı yok; (c) `AuditEvent` yok, yalnızca `LotQualityEvent` ve defter; (d) reçete onayı yetkisi hâlâ `is_staff`; (e) `waste_factor` tek değer, adımlı fire yok.
 - **Geri dönüş planı:** Henüz üretim verisi yok; tablolar boşken app yerleşimi/tesis kararı ucuz değişir. Tesis modeli sonradan eklenebilir (nullable FK → doldur → zorunlu).
+
+## ADR-013 — Kimlik doğrulama stratejisi ve rol modeli
+- **Tarih:** 2026-10-15
+- **Durum:** Onaylandı (2026-10-15; ürün sahibi, "uygun olanı seç" yetkisiyle). **Henüz uygulanmadı**; sıradaki backend görevi.
+- **Bağlam:** ADR-010 kimlik doğrulama stratejisini Faz 3'ten önce karara bağlamayı şart koştu; ADR-009 rolleri `RoleAssignment`'a bıraktı. Next.js Admin ekranlarına başlamadan önce ikisi de gerekli. Geçici `is_staff` + Django izinleri (ADR-012 §10) hâlâ yürürlükte.
+- **Karar:**
+  1. **Web (müşteri sitesi ve Admin, Next.js): sunucu tarafı oturum.** `HttpOnly`, `Secure`, `SameSite=Lax` oturum çerezi + Django CSRF. Tarayıcıda (localStorage vb.) token tutulmaz. Web ve API aynı kayıtlı alan adı altında (ör. `app.` ve `api.` alt alanları) dağıtılır; CORS yalnızca izinli origin'lere, `credentials` ile açılır. Mevcut `SessionAuthentication` doğru seçimdir, yer tutucu olmaktan çıkar.
+  2. **Mobil (Faz 6): kısa ömürlü access token + dönen refresh token**, cihaz bazlı iptal edilebilir; platformun güvenli saklaması (Keychain/Keystore). Kütüphane seçimi Faz 6'da, bağımlılık eklenmeden önce yapılır. Web oturumu ile mobil token aynı kullanıcı ve izin modelini kullanır.
+  3. **Uç noktalar:** `POST /auth/login/`, `POST /auth/logout/`, `GET /me/` (web, Faz 1 sonu); `POST /auth/refresh/` mobil ile birlikte (Faz 6). Kimliksiz istek **401** `AUTHENTICATION_REQUIRED` döner (şu an geçici olarak 403; ADR-010 notu kapanır). Giriş denemesine hız sınırı (DRF throttle) zorunludur.
+  4. **Rol modeli:** `accounts.RoleAssignment` (`user`, `role_code`, `created_at`; tek tesis olduğu için `site` yok, ADR-012 §8). Roller 02 §2'deki liste: `CUSTOMER`, `ADMIN`, `PLANNER`, `PURCHASING`, `PRODUCTION`, `QUALITY`, `PACKING`, `DRIVER`, `SUPPORT`, `FINANCE`. Bir kullanıcının birden çok rolü olabilir. **Rol → izin eşlemesi kodda sabit ve testlidir** (yönetim ekranından düzenlenmez); varsayılan reddet. Rol tek başına yetmez: nesne kapsamı da kontrol edilir (müşteri yalnızca kendi kayıtları, kurye yalnızca atanmış teslimatlar; 05 §1).
+  5. **Geçici yetkilerin yerine geçiş:** `IsCatalogAdmin`, `IsBackOfficeStaff` ve `staff_with_permission(...)` tek noktalardır; rol tabanlı izinle **yalnızca bu sınıflar** değiştirilir, view'lara dokunulmaz. `is_staff` yalnızca Django admin erişimi anlamına döner (ADR-009 ilkesi geri kurulur). İlk eşleme önerisi: katalog/reçete → `ADMIN`; tedarik ve mal kabul → `PURCHASING`; lot release/block → `QUALITY`; stok düzeltme ve ters hareket → `ADMIN`; rezervasyon/tüketim → `PLANNER`, `PRODUCTION`; mal kabul ters kaydı → `ADMIN`. Eşleme uygulama sırasında tabloya dökülür ve test edilir.
+  6. **Hesap güvenliği:** Django parola doğrulayıcıları kalır; personel/Admin hesapları için çok faktörlü doğrulama **Faz 7 (pilot) öncesinde zorunlu hedef**, ondan önce şart değil. Müşteri kaydı, e-posta doğrulama ve telefon benzersizliği Faz 3 başında ayrıca karara bağlanır (ADR-009 açık noktası burada kapanmaz).
+- **Alternatifler:** Web için de JWT (tarayıcıda token saklama/XSS riski, iptal zorluğu); yalnızca Django grupları/izinleri (rol-nesne kapsamı ve eşleme testi zayıf); tüm istemciler için tek token yöntemi.
+- **Gerekçe:** Tarayıcıda oturum çerezi, token saklamaktan daha güvenlidir ve mevcut kodla uyumludur; mobil için cihaz bazlı token gerekir. Roller, 05 §1'deki "varsayılan olarak izin yok" ilkesini kodda sabit bir eşlemeyle uygular.
+- **Etkilenen modüller/dosyalar (uygulamada):** `apps/accounts` (RoleAssignment, giriş/çıkış/`me` görünümleri, throttle), `apps/core/permissions.py`, `apps/catalog/permissions.py`, `config/settings/base.py` (oturum çerezi, CORS/CSRF ayarları), `docs/architecture/{02,03,05,08}`.
+- **Migration/API etkisi:** `accounts.0002_roleassignment`; yeni `/auth/*`, `/me/`. Mevcut endpoint sözleşmeleri değişmez, yalnızca kimliksiz yanıt 403 → 401 olur (istemciler henüz yok).
+- **Bilinen riskler:** çerez tabanlı oturum için aynı site (same-site) dağıtım şart; farklı alan adlarına bölünürse strateji yeniden değerlendirilir. Mobil token yöntemi Faz 6'ya kadar denenmemiş kalır.
+- **Geri dönüş planı:** Henüz kod yok; kullanıcı/oturum verisi olmadığından strateji değişimi ucuz.
 
 ## Yeni karar şablonu
 
