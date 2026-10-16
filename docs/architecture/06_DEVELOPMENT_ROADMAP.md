@@ -19,7 +19,7 @@ Süreler tahminidir; ekip boyutu, entegrasyonlar ve operasyonel gereksinimler ne
 - [x] Birim ve dönüşüm sözlüğü (`Unit`, `IngredientUnitConversion`, `convert_quantity`; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
 - [x] RecipeVersion ve RecipeLine (taslak → onaylı → emekli, onayda taban birim snapshot'ı, fire, ihtiyaç hesabı; sandbox'ta test edildi — Docker/CI doğrulaması bekliyor)
 - [x] Alerjen bilgisi (`Allergen`, `IngredientAllergen`, reçete bazında türetilmiş özet; sandbox'ta test edildi)
-- [ ] Kimlik ve roller (ADR-013: oturum çerezi + `RoleAssignment`; Admin ekranlarının ön koşulu)
+- [x] Kimlik ve roller (ADR-013: oturum çerezi + CSRF, `RoleAssignment`, koda sabit rol→izin tablosu, 401, giriş hız sınırı; sandbox'ta test edildi)
 - [ ] Admin temel ekranları (Next.js — henüz başlanmadı; kimlik ve roller bittikten sonra)
 - [x] Model ve API testleri (backend için; sandbox'ta çalıştırıldı)
 
@@ -40,15 +40,16 @@ Süreler tahminidir; ekip boyutu, entegrasyonlar ve operasyonel gereksinimler ne
 **Çıkış:** Mal kabulden kullanılabilir stok hesabına kadar hareketler izlenebilir; stok fazla rezerve edilemez. *(Backend için karşılandı; kanıt: `inventory/tests/test_concurrency.py`.)*
 
 ## Faz 3 — Sipariş ve müşteri web'i
-- [ ] Order ve OrderLine
-- [ ] Fiyat snapshot'ı
-- [ ] Durum makinesi
-- [ ] Idempotency
-- [ ] Sipariş/iptal ve rezervasyon kuralları
-- [ ] Next.js müşteri web akışı
-- [ ] Kimlik ve erişim testleri
+- [x] Order ve OrderLine (+ `OrderStatusEvent`, `CustomerAddress`; backend, sandbox'ta test edildi)
+- [x] Fiyat snapshot'ı (fiyat, ad, SKU, reçete sürümü, teslimat adresi)
+- [x] Durum makinesi (`confirmed` → `cancelled`; üretim/paketleme/teslimat durumları sonraki fazlarda aynı servise eklenir)
+- [x] Idempotency (`POST /orders/` için zorunlu `Idempotency-Key`)
+- [x] Sipariş/iptal ve rezervasyon kuralları (ADR-014 onaylandı; ürün varsayımları gerçek veriyle gözden geçirilecek)
+- [x] Müşteri kaydı (ADR-015, backend; **e-posta doğrulaması ve parola sıfırlama Faz 6 bildirimleriyle** gelecek)
+- [ ] Next.js müşteri web akışı (araç seçimi ADR-016 ile karara bağlandı; uygulama başlamadı)
+- [x] Kimlik ve erişim testleri (backend: nesne kapsamı, rol matrisi, 401/403/404, CSRF, hız sınırı)
 
-**Çıkış:** Uçtan uca sipariş oluşturma ve güvenli iptal çalışır.
+**Çıkış:** Uçtan uca sipariş oluşturma ve güvenli iptal çalışır. *(Backend karşılandı; müşteri web'i ve kayıt akışı hariç.)*
 
 ## Faz 4 — Üretim planlama
 - [ ] Sipariş talep özeti

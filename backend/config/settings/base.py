@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "apps.recipes",
     "apps.purchasing",
     "apps.inventory",
+    "apps.orders",
 ]
 
 MIDDLEWARE = [
@@ -96,6 +97,18 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# Session and CSRF cookies (ADR-013 §1). The session cookie is HttpOnly (Django default) and
+# SameSite=Lax; both are Secure whenever DEBUG is off. The CSRF cookie must stay readable by the
+# client script. Web and API are deployed under one registrable domain; list the web origins in
+# DJANGO_CSRF_TRUSTED_ORIGINS (e.g. https://app.example.com).
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = env.bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SECURE = env.bool("DJANGO_CSRF_COOKIE_SECURE", default=not DEBUG)
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+
 # --- i18n / time ------------------------------------------------------------
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"  # stored and served in UTC; clients localise
@@ -109,9 +122,14 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 REST_FRAMEWORK = {
     # Deny by default: every endpoint must opt in to being public (05_SECURITY §1).
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
-    # PLACEHOLDER: the token/session strategy for customer vs. staff clients is still an open
-    # decision (03_API_CONTRACTS §1). Replace when it is decided (needs an ADR).
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
+    # ADR-013: web clients use the server-side session cookie + CSRF; anonymous -> 401.
+    # Mobile token authentication is added in Phase 6.
+    "DEFAULT_AUTHENTICATION_CLASSES": ["apps.accounts.authentication.SessionAuthentication401"],
+    "DEFAULT_THROTTLE_RATES": {
+        "login_ip": env("LOGIN_THROTTLE_RATE_IP", default="20/min"),
+        "login_email": env("LOGIN_THROTTLE_RATE_EMAIL", default="5/min"),
+        "register_ip": env("REGISTER_THROTTLE_RATE_IP", default="5/hour"),
+    },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "apps.core.exceptions.api_exception_handler",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
@@ -131,10 +149,21 @@ SPECTACULAR_SETTINGS = {
         "ReservationStatusEnum": "apps.inventory.models.StockReservation.Status",
         "LotQualityStatusEnum": "apps.inventory.models.InventoryLot.QualityStatus",
         "StockMovementTypeEnum": "apps.inventory.models.StockMovement.Type",
+        "OrderStatusEnum": "apps.orders.models.Order.Status",
     },
     # Schema is not public by default; local settings relax this.
     "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
 }
+
+# --- Orders (ADR-014) -------------------------------------------------------------------------
+# PROVISIONAL product assumptions (00 §8): confirm or change per business decision.
+ORDER_MIN_LEAD_DAYS = env.int("ORDER_MIN_LEAD_DAYS", default=1)  # earliest delivery: today + N
+# A customer may cancel while delivery is at least N days away; staff are not bound by this.
+ORDER_CUSTOMER_CANCEL_MIN_DAYS = env.int("ORDER_CUSTOMER_CANCEL_MIN_DAYS", default=1)
+# Abuse guards (not business rules): keep one request's reservation work bounded.
+ORDER_MAX_LINES = env.int("ORDER_MAX_LINES", default=30)
+ORDER_MAX_LINE_QUANTITY = env.int("ORDER_MAX_LINE_QUANTITY", default=100)
+ADDRESS_MAX_PER_CUSTOMER = env.int("ADDRESS_MAX_PER_CUSTOMER", default=10)
 
 # --- Logging ----------------------------------------------------------------
 # Every record carries request_id (01_ARCHITECTURE §7). Never log passwords, tokens

@@ -34,7 +34,17 @@
 - `POST /auth/logout/`
 - `GET /me/`
 
-**Karar (ADR-013, onaylandı; henüz uygulanmadı):** web istemcileri sunucu tarafı oturum çerezi + CSRF kullanır (`login`, `logout`, `me`); `refresh` yalnızca mobil token akışı içindir (Faz 6). Kimliksiz istek 401 `AUTHENTICATION_REQUIRED` döner. Giriş denemesi hız sınırlıdır. Rol tabanlı izinler `RoleAssignment` ile gelir; o zamana kadar mevcut geçici `is_staff` + Django izinleri geçerlidir.
+**Uygulandı (ADR-013):** web istemcileri sunucu tarafı oturum çerezi + CSRF kullanır; `refresh` yalnızca mobil token akışı içindir (Faz 6, henüz yok).
+
+| Endpoint | Davranış |
+|---|---|
+| `GET /auth/csrf/` | Herkese açık; `{"csrf_token": "..."}` döner ve `csrftoken` çerezini kurar. İstemci, `POST`'lardan önce bunu çağırır ve token'ı `X-CSRFToken` başlığında gönderir. |
+| `POST /auth/login/` | Gövde `{email, password}`. Başarıda `200` + `/me/` yükü ve `HttpOnly` oturum çerezi (oturum anahtarı her girişte yenilenir). Hatalı parola, bilinmeyen e-posta ve pasif hesap **aynı** yanıtı verir: `401 AUTHENTICATION_REQUIRED` "Invalid email or password." CSRF anonim istekte de zorunludur. Hız sınırı: adres başına `20/dk`, e-posta başına `5/dk` (`429 RATE_LIMITED`). |
+| `POST /auth/register/` | ADR-015. Gövde `{email, password, phone?}`. Hesap yalnızca `CUSTOMER` rolüyle oluşur (gövde rol/bayrak seçemez), oturum açılır, `201` + `/me/` yükü. CSRF zorunlu. Geçersiz e-posta/telefon veya Django parola doğrulayıcılarını geçemeyen parola `400 VALIDATION_ERROR` (`details.password` mesaj listesi). Kayıtlı e-posta `400` (`details.email`, küçük/büyük harf fark etmez). Zaten oturum açıksa `409`. Hız sınırı: adres başına `5/saat` (`429 RATE_LIMITED`). E-posta doğrulaması henüz yok. |
+| `POST /auth/logout/` | Oturumu kapatır, `204`. Oturumsuzsa `401`. |
+| `GET /me/` | `{id, email, phone, roles[], permissions[]}`. `permissions`, rollerin verdiği izin kodlarıdır; istemci eylemleri göstermek/gizlemek için kullanabilir ama güvenlik sunucudadır. |
+
+Kimliksiz istek her yerde **401** `AUTHENTICATION_REQUIRED` döner (`WWW-Authenticate: Session`); kimlikli ama yetkisiz istek **403** `PERMISSION_DENIED`. Hız sınırı sayaçları Django önbelleğindedir: birden çok backend süreci için paylaşımlı önbellek (Redis) gerekir. CORS henüz açık değildir (aşağıya bakın).
 
 ### Katalog ve reçete
 - `GET /products/`
@@ -49,7 +59,7 @@
 - `GET /admin/units/`, `GET /admin/units/{id}/` (salt okunur birim sözlüğü)
 
 Ortak kurallar (aşağıdaki §7 maddeleri için):
-- **Kimlik:** hepsi kimlik doğrulama ister. `/products/*`: giriş yapmış herhangi bir kullanıcı (müşteri listesi kimlik zorunlu kabul edildi; herkese açma ayrı karar). `/admin/*`: **geçici** `IsCatalogAdmin` (`is_staff`); roller (`RoleAssignment`) gelince role dayalı izinle değiştirilecek. Kimliksiz: `AUTHENTICATION_REQUIRED`; yetkisiz: `PERMISSION_DENIED`.
+- **Kimlik:** hepsi kimlik doğrulama ister. `/products/*`: giriş yapmış herhangi bir kullanıcı (müşteri listesi kimlik zorunlu kabul edildi; herkese açma ayrı karar). `/admin/*`: rol tabanlı `IsCatalogAdmin` (ADR-013; okuma `catalog:read`, yazma `catalog:manage`, tablo 05 §1). Kimliksiz: 401 `AUTHENTICATION_REQUIRED`; yetkisiz: 403 `PERMISSION_DENIED`.
 - **Nesne kapsamı:** `/products/` yalnızca `is_active=true` ürünleri döndürür; pasif ürün detayı `RESOURCE_NOT_FOUND`. Admin tüm kayıtları görür.
 - **Alanlar:** `is_active` düz gövdeyle yazılamaz (`VALIDATION_ERROR`); yalnızca `activate`/`deactivate` eylemleriyle değişir (idempotent, 200). `sku` ve ingredient `base_unit` oluşturulduktan sonra değişmez: PATCH'te farklı değer `VALIDATION_ERROR`, aynı değerin tekrarı kabul edilir. `PUT` ve `DELETE` yoktur (405).
 - **Filtreler (liste):** `q` (SKU/ad, büyük-küçük harf duyarsız), `is_active` (yalnızca admin listeleri, `true|false`, geçersiz değer `VALIDATION_ERROR`). Sayfalama: DRF `PageNumberPagination` (50): `count`, `next`, `previous`, `results`.
@@ -60,16 +70,20 @@ Ortak kurallar (aşağıdaki §7 maddeleri için):
 - **Ingredient request:** `POST` gövdesi `{sku, name, base_unit}`; `base_unit` birim `code`'udur (`g`, `ml`, `pcs`), taban birim olmalıdır. `PATCH` yalnızca `name` değiştirir.
 - **Henüz API'si yok:** `IngredientUnitConversion` yönetimi (şimdilik Django admin ve `catalog.services.create_unit_conversion`).
 
-**Faz 1 tamamlayıcıları (uygulandı; ADR-012).** Hepsi geçici `IsCatalogAdmin` (`is_staff`) ister.
+**Faz 1 tamamlayıcıları (uygulandı; ADR-012).** Hepsi `IsCatalogAdmin` ister (rol tabanlı, ADR-013).
 - Alerjen: `GET|POST /admin/allergens/`, `GET|PATCH /admin/allergens/{id}/`, `POST …/activate/`, `POST …/deactivate/` (`code` değişmez); `GET|PUT /admin/ingredients/{id}/allergens/` (PUT gövdesi `{"allergens":[{"allergen":"gluten","presence":"contains"}]}` beyanı bütün olarak değiştirir, boş liste temizler; pasif alerjen yeni eklenemez).
 - Reçete: `GET|POST /admin/recipe-versions/` (filtre `product` SKU, `status`), `GET|PATCH /admin/recipe-versions/{id}/` (yalnızca taslak; `lines` verilirse satırların tamamı değişir), `POST …/approve/`, `POST …/retire/`, `GET …/requirements/?quantity=&unit=` (taban birimde net/brüt ihtiyaç). `status` düz gövdeyle yazılamaz. `GET` ayrıntısı `lines` ve türetilmiş `allergens` içerir.
 - Hatalar: onaylı/emekli sürümü düzenleme veya yanlış durumdan geçiş `409 INVALID_STATE_TRANSITION`; satırsız onay, pasif malzeme, dönüştürülemeyen birim `400 VALIDATION_ERROR`.
 
-### Sipariş
-- `POST /orders/`
-- `GET /orders/`
-- `GET /orders/{id}/`
-- `POST /orders/{id}/cancel/`
+### Sipariş (ADR-014 — uygulandı; geçici ürün varsayımlarıyla)
+| Endpoint | Davranış |
+|---|---|
+| `POST /orders/` | `CUSTOMER`. `Idempotency-Key` **zorunlu** (yoksa 400). Gövde 4. bölümdeki gibi. Tek işlemde: doğrulama → fiyat/reçete snapshot'ı → malzeme bazında toplu FEFO rezervasyonu → sipariş `confirmed`. İlk istek `201`, aynı anahtar+gövde tekrarı `200` (güncel durumla), aynı anahtar farklı gövde `409 IDEMPOTENCY_CONFLICT`. Yetersiz stok `409 INSUFFICIENT_STOCK`, `details: {"products": [id…]}` — **malzeme adı/miktarı müşteriye sızmaz**; hiçbir kayıt/rezervasyon kalmaz. Doğrulama hataları `400 VALIDATION_ERROR` (`details.items[i].product_id/quantity`, `delivery_date`, `delivery_address_id`). Pasif ürün, onaylı reçetesi olmayan ürün ve adet-bazlı olmayan reçete aynı mesajla "sipariş edilemez" döner. |
+| `GET /orders/`, `GET /orders/{id}/` | `CUSTOMER`: yalnızca kendi siparişleri. `ADMIN`, `PLANNER`, `PRODUCTION`, `PACKING`, `SUPPORT`, `FINANCE`: tümü; yanıtta ek olarak `customer_id`, `customer_email`, `status_history`. Başkasının siparişi **404** `RESOURCE_NOT_FOUND`. Filtreler: `status`, `delivery_date`, `customer` (e-posta; yalnızca arka ofis, müşteri için yok sayılır). |
+| `POST /orders/{id}/cancel/` | Gövde `{reason?}`. `CUSTOMER` kendi siparişini, teslimata en az `ORDER_CUSTOMER_CANCEL_MIN_DAYS` (varsayılan 1) gün varken iptal eder; geçmişse `409 CONFLICT` (`details.latest_cancellation_date`). `ADMIN`/`SUPPORT` (`orders:cancel_any`) süre sınırı olmadan iptal eder ama `reason` zorunlu. Rezervasyonlar aynı işlemde serbest bırakılır. İdempotent (iptal edilmişse `200`). |
+| `GET|POST /me/addresses/`, `GET|PATCH|DELETE /me/addresses/{id}/` | `CUSTOMER`; yalnızca kendi adres defteri (başkasınınki 404). `country_code` ISO-2 (büyük harfe çevrilir). |
+
+Durum değerleri **küçük harfle** (`confirmed`, `cancelled`; kodun geri kalanıyla tutarlı), 4. bölümdeki örnekteki `CONFIRMED` yalnızca örnektir.
 
 ### Stok ve satın alma
 - `GET /inventory/balances/`
@@ -79,7 +93,7 @@ Ortak kurallar (aşağıdaki §7 maddeleri için):
 - `POST /goods-receipts/`
 - `POST /inventory/adjustments/`
 
-**Faz 2 uygulaması (ADR-012, onaylandı).** Yukarıdaki altı endpoint ve aşağıdakiler uygulandı. Yetki **geçicidir** (ADR-009/010): hepsi `is_staff`; 05 §1'in "özel izin" dediği işlemler ayrıca Django izni ister (süper kullanıcı hepsine sahiptir). `RoleAssignment` gelince (ADR-013) rol tabanlı izinle değiştirilecek.
+**Faz 2 uygulaması (ADR-012, onaylandı).** Yukarıdaki altı endpoint ve aşağıdakiler uygulandı. Yetki rol tabanlıdır (ADR-013; tablo 05 §1): okuma `*:read`, tedarik yazma `purchasing:manage`, rezervasyon/tüketim `inventory:reserve`, lot release/block `QUALITY`, düzeltme/ters hareket ve mal kabul ters kaydı `ADMIN`.
 
 | Endpoint | Not |
 |---|---|
@@ -166,7 +180,7 @@ Response `201 Created`:
 }
 ```
 
-Tutarlar sadece örnektir. Fiyat, indirim, vergi ve teslimat ücreti sunucuda hesaplanır. Gerçek iş kuralına göre sipariş önce `PLACED` olup stok/ödeme doğrulamasından sonra `CONFIRMED` olabilir; bu durum makinesi ürün kararıyla kesinleştirilmelidir.
+Tutarlar sadece örnektir. Fiyat, indirim, vergi ve teslimat ücreti sunucuda hesaplanır. Uygulanan akış (ADR-014): ödeme sağlayıcısı henüz yok ve stok kontrolü eşzamanlı olduğundan sipariş, rezervasyon başarılıysa doğrudan `confirmed` olur; `PLACED`/ödeme bekleme durumu ödeme kararıyla eklenecektir.
 
 ## 5. Örnek hata
 

@@ -5,6 +5,7 @@ from django.db.models.functions import Lower
 from apps.core.models import UUIDTimestampedModel
 
 from .managers import UserManager, normalize_email
+from .roles import Role
 
 
 class User(UUIDTimestampedModel, AbstractBaseUser, PermissionsMixin):
@@ -51,3 +52,27 @@ class User(UUIDTimestampedModel, AbstractBaseUser, PermissionsMixin):
     def save(self, *args, **kwargs):
         self.email = normalize_email(self.email)
         super().save(*args, **kwargs)
+
+
+class RoleAssignment(UUIDTimestampedModel):
+    """A business role held by a user (ADR-013 §4, 02_DATA_MODEL §2).
+
+    A user may hold several roles. What each role may do is the fixed table in
+    ``apps.accounts.roles``; this row only says who holds which role. There is no site scope
+    because a single facility is assumed (ADR-012 §8).
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="role_assignments")
+    role_code = models.CharField(max_length=16, choices=Role.choices)
+
+    class Meta:
+        db_table = "accounts_role_assignment"
+        ordering = ["user", "role_code"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "role_code"], name="accounts_roleassignment_unique_user_role"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} - {self.role_code}"

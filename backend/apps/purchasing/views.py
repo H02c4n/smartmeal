@@ -1,7 +1,8 @@
 """Purchasing API (03_API_CONTRACTS, section "Stock and purchasing").
 
-Back-office only (placeholder ``IsBackOfficeStaff``, ADR-009/010); reversing a receipt needs the
-explicit ``purchasing.reverse_goodsreceipt`` permission (05 §1). Receiving goods requires an
+Back-office only, role-based (ADR-013; table in ``apps.accounts.roles``): reading needs
+``purchasing:read``, writing ``purchasing:manage``; reversing a receipt needs the separate
+``purchasing:reverse_receipt`` permission (05 §1). Receiving goods requires an
 ``Idempotency-Key`` header so a retried request cannot receive the same delivery twice.
 """
 
@@ -12,8 +13,9 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from apps.accounts.roles import Perm
 from apps.core.idempotency import request_key, run_idempotent
-from apps.core.permissions import IsBackOfficeStaff, staff_with_permission
+from apps.core.permissions import has_permission, has_permission_by_method
 from apps.core.serializers import ReasonSerializer
 
 from . import selectors, services
@@ -38,7 +40,8 @@ IDEMPOTENCY_HEADER = OpenApiParameter(
     "returns the original result without repeating its effect; a different body is a 409.",
 )
 STATUS_PARAM = OpenApiParameter("status", OpenApiTypes.STR, description="Filter by status.")
-CanReverseReceipt = staff_with_permission("purchasing.reverse_goodsreceipt")
+CanReverseReceipt = has_permission(Perm.PURCHASING_REVERSE_RECEIPT)
+PurchasingAccess = has_permission_by_method(read=Perm.PURCHASING_READ, write=Perm.PURCHASING_MANAGE)
 
 
 def _schema(view) -> bool:
@@ -47,7 +50,7 @@ def _schema(view) -> bool:
 
 # --- Suppliers ------------------------------------------------------------------------------
 class SupplierViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
-    permission_classes = [IsBackOfficeStaff]
+    permission_classes = [PurchasingAccess]
     serializer_class = SupplierSerializer
 
     def get_queryset(self):
@@ -90,7 +93,7 @@ class SupplierViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
 class PurchaseOrderViewSet(
     mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
 ):
-    permission_classes = [IsBackOfficeStaff]
+    permission_classes = [PurchasingAccess]
 
     def get_serializer_class(self):
         return PurchaseOrderListSerializer if self.action == "list" else PurchaseOrderSerializer
@@ -159,7 +162,7 @@ class PurchaseOrderViewSet(
 class GoodsReceiptViewSet(
     mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
 ):
-    permission_classes = [IsBackOfficeStaff]
+    permission_classes = [PurchasingAccess]
     serializer_class = GoodsReceiptSerializer
 
     def get_permissions(self):

@@ -83,22 +83,3 @@ def make_released_lot(receive, staff_user):
 def staff_client(api_client, staff_user):
     api_client.force_authenticate(staff_user)
     return api_client
-
-
-@pytest.fixture
-def grant(staff_user):
-    """Grant Django permissions (``'inventory.adjust_stock'``...) to the staff user."""
-    from django.contrib.auth.models import Permission
-
-    from apps.accounts.models import User
-
-    def _grant(*codes, user=None):
-        user = user or staff_user
-        for code in codes:
-            app_label, codename = code.split(".")
-            user.user_permissions.add(
-                Permission.objects.get(content_type__app_label=app_label, codename=codename)
-            )
-        return User.objects.get(pk=user.pk)  # drop the cached permission set
-
-    return _grant

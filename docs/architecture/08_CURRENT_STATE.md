@@ -4,8 +4,8 @@
 
 ## Son güncelleme
 - Tarih: 2026-10-15
-- Güncelleyen: Doğrulama sonrası karar oturumu (ADR-007…012 onayı, ADR-013 kimlik/rol kararı); kod değişmedi
-- Önceki oturum (2026-10-14): Faz 1 tamamlayıcıları (alerjen, reçete) + Faz 2 (tedarik ve stok), backend
+- Güncelleyen: ADR-013 (kimlik/roller) + Faz 3 backend (sipariş) + müşteri kaydı (ADR-015) + Next.js araç ADR'si (ADR-016), sandbox'ta test edilerek
+- Önceki oturumlar: karar oturumu (ADR-007…013 onayı, 2026-10-15); Faz 1 tamamlayıcıları + Faz 2 backend (2026-10-14)
 
 ## Genel durum
 - [x] Faz 0 altyapısı (değişmedi)
@@ -16,77 +16,90 @@
 - [x] `core`: ortak 409 hata sınıfları, `Idempotency-Key` altyapısı, izin yardımcıları (bu oturum)
 - [x] Faz 1/Faz 2 kodu kullanıcının Docker ortamında, testlerde ve GitHub Actions'ta çalıştırıldı; **kullanıcı sonucu başarılı olarak bildirdi** (2026-10-15). Ayrıntılı çıktılar bu oturumda görülmedi; aşağıdaki sayılar sandbox'tandır.
 - [x] ADR-007…012 **Onaylandı** (2026-10-15)
-- [x] ADR-013 (kimlik doğrulama ve roller) **Onaylandı**, **henüz uygulanmadı**
+- [x] ADR-013 (kimlik doğrulama ve roller) **uygulandı (backend)**: `RoleAssignment`, oturum çerezi + CSRF, `/auth/csrf|login|logout/`, `/me/`, 401, giriş hız sınırı, koda sabit rol→izin tablosu
+- [x] `orders` (Faz 3 backend): Order, OrderLine, OrderStatusEvent, CustomerAddress, sipariş/iptal servisleri, `/orders/*`, `/me/addresses/*`
+- [x] **ADR-014 (sipariş akışı) Onaylandı** (2026-10-16, ürün sahibi); varsayımlar gerçek veriyle gözden geçirilecek
+- [x] **ADR-015 (müşteri kaydı)** Onaylandı ve uygulandı (backend): `POST /auth/register/`, yalnızca `CUSTOMER` rolü, oturum açar, hız sınırlı; e-posta doğrulaması ve parola sıfırlaması yok
+- [x] **ADR-016 (Next.js araçları)** Onaylandı, **uygulanmadı**: `web/` + `admin/`, pnpm workspace, aynı origin `/api` proxy (CORS yok), OpenAPI'den tip üretimi
+- [ ] Bu oturumun kodu kullanıcının Docker ortamında/CI'da henüz çalıştırılmadı
+
 
 ## Faz durumu
 - Faz 0: **Tamamlandı**
-- Faz 1: **Backend tamamlandı**; kalan: kimlik ve roller (ADR-013), ardından **Next.js Admin temel ekranları**
-- Faz 2: **Backend tamamlandı** ve doğrulandı (sandbox + kullanıcı bildirimi: Docker/CI/test başarılı); ADR-012 onaylandı
-- Faz 3–7: Bekliyor
+- Faz 1: **Backend tamamlandı** (kimlik ve roller dahil); kalan: **Next.js Admin temel ekranları**
+- Faz 2: **Backend tamamlandı** ve doğrulandı
+- Faz 3: **Backend uygulandı (sandbox testli; Docker'da migration uygulandı), ADR-014 onaylandı**; kalan: **Next.js müşteri web akışı** (ADR-016 ile araçlar belli)
+- Faz 4–7: Bekliyor
 
 ## Son tamamlanan görev
-1. **Alerjen:** `Allergen` (tohumsuz, kod değişmez, pasife alınır), `IngredientAllergen` (`contains`/`may_contain`), malzeme beyanını bütün olarak değiştiren `PUT`, reçete bazında türetilmiş alerjen özeti.
-2. **Reçete:** sürüm numaralandırma (ürün kilidiyle), taslak düzenleme, `approve` (satırsız/pasif malzeme/dönüştürülemeyen birim reddi; miktarları taban birime dondurma; önceki onaylıyı emekli etme), `retire`, `requirements` (net/brüt ihtiyaç, ölçeklenmiş).
-3. **Tedarik:** tedarikçi, sipariş durum makinesi, atomik mal kabul (lot + `RECEIPT` hareketi + sipariş miktarları), %10 fazla-teslimat toleransı, mal kabul ters kaydı.
-4. **Stok:** lot (`pending` başlar), yalnızca-ekleme defter, rezervasyon (lot bazlı, FEFO, tümü-ya-hiç, idempotent, süre sonu), tüketim (`LOT_BLOCKED` kuralı), serbest bırakma/bloke (gerekçe + olay günlüğü), düzeltme ve ters hareket, bakiye tanımı (`physical = reserved + available + unavailable`), `reconcile_inventory`.
-5. **Idempotency:** `core.IdempotencyRecord` + `run_idempotent`; mal kabul ve stok düzeltmede `Idempotency-Key` zorunlu.
+1. **ADR-013 backend:** `accounts.RoleAssignment`; `apps/accounts/roles.py` (roller, izin kodları, sabit ve değişmez rol→izin tablosu); `GET /auth/csrf/`, `POST /auth/login/` (CSRF zorunlu, oturum anahtarı yenilenir, tek tip hata, hız sınırı), `POST /auth/logout/`, `GET /me/`; kimliksiz istek 401 (`SessionAuthentication401`); `core.permissions.has_permission / has_permission_by_method`; purchasing ve inventory view'ları ile `IsCatalogAdmin` rol tabanlıya geçti; `IsBackOfficeStaff` ve `staff_with_permission` silindi; Django admin'de kullanıcıya rol inline'ı.
+2. **Faz 3 backend (ADR-014, onaylandı):** `place_order` (doğrulama → fiyat/reçete/adres snapshot'ı → malzeme bazında toplu FEFO rezervasyonu → `confirmed`, hepsi tek işlemde), `cancel_order` (rezervasyon serbest bırakma, müşteri süre sınırı, arka ofis gerekçesi, idempotent), gün bazlı sipariş numarası, durum olay günlüğü, adres defteri, müşteri/arka ofis nesne kapsamı, müşteriye stok sızıntısı yok.
+3. **Müşteri kaydı (ADR-015):** `register_customer` servisi (yalnızca `CUSTOMER` rolü, yinelenen e-posta büyük/küçük harf fark etmeden reddedilir, paralel kayıtta tek hesap), parola doğrulayıcıları, telefon isteğe bağlı/benzersiz değil, adres başına `5/saat`, kayıt sonrası oturum açma.
+4. **Gerçek hata düzeltmesi:** `create_address` gerçek oturum kullanıcısıyla (`request.user` lazy nesne) 500 veriyordu; önceki testler `force_authenticate` kullandığı için kaçırılmıştı. Düzeltildi ve gerçek-oturum regresyon testi eklendi.
+5. Önceki oturumlar: alerjen, reçete, tedarik, stok, idempotency (değişmedi).
 
 ## Aktif görev
 Yok. Sıradaki: bkz. "Sonraki görev".
 
 ## Değişen dosyalar (bu oturum)
-- Yeni app'ler: `backend/apps/recipes/`, `backend/apps/purchasing/`, `backend/apps/inventory/` (models, services, selectors, serializers, views, urls, admin, migrations, tests; inventory'de ayrıca `management/commands/{reconcile_inventory,release_expired_reservations}.py`)
-- `backend/apps/catalog/`: `models.py` (+Allergen, IngredientAllergen), `services.py`, `selectors.py`, `serializers.py`, `views.py`, `urls.py`, `admin.py`, `migrations/0003_allergens.py`, `tests/test_allergens.py`; `tests/test_django_admin.py` (yeni inline form alanları)
-- `backend/apps/core/`: yeni `api_errors.py`, `idempotency.py`, `permissions.py`, `serializers.py`, `migrations/0001_idempotency.py`, `models.py` (+IdempotencyRecord), `exceptions.py` (`error.details` için `extra` desteği), `tests/test_api_errors.py`, `tests/test_idempotency.py`; `tests/test_project_setup.py` ("core tablosuzdur" testi "yalnızca IdempotencyRecord" olarak bilinçli değiştirildi)
-- `backend/config/settings/base.py` (INSTALLED_APPS, `SPECTACULAR_SETTINGS.ENUM_NAME_OVERRIDES`), `backend/config/urls.py`
-- `backend/pyproject.toml`: testler için ruff `F811` yok sayıldı (başka app'in fixture'larını içe aktarma)
-- Belgeler: `docs/architecture/{01,02,03,06,07,08}`, `README.md`
-- Değişmeyen: `uv.lock`/bağımlılıklar (yeni paket yok), Docker/CI dosyaları
+- Yeni: `backend/apps/orders/` (models, services, selectors, serializers, views, urls, admin, `migrations/0001_initial.py`, tests: `conftest`, `test_services`, `test_api`, `test_concurrency`)
+- Yeni (accounts): `roles.py`, `authentication.py`, `throttles.py`, `serializers.py`, `views.py`, `urls.py`, `schema.py`, `services.py` (kayıt), `migrations/0002_roleassignment.py`, `tests/{test_roles,test_auth_api,test_register}.py`; değişen: `models.py` (+RoleAssignment), `admin.py` (rol inline'ı), `apps.py` (OpenAPI uzantısı), `tests/test_admin.py`
+- Değişen (core): `permissions.py` (yeniden yazıldı); yeni `tests/test_role_permissions.py` (rol × endpoint erişim matrisi)
+- Değişen: `catalog/permissions.py`, `purchasing/views.py`, `inventory/views.py`, `purchasing/tests/{test_api,conftest}.py`, `inventory/tests/{conftest,test_api}.py`, kök `conftest.py` (rol fixture'ları, önbellek temizliği)
+- `backend/config/settings/base.py` (kimlik doğrulama sınıfı, hız sınırları: giriş ve kayıt, çerez/CSRF ayarları, `ORDER_*`/`ADDRESS_*` ayarları, `apps.orders`, `OrderStatusEnum`), `settings/local.py` (çerezler Secure değil), `config/urls.py`
+- Düzeltme: `orders/services.py` (`create_address` lazy kullanıcı), `orders/tests/test_api.py` (gerçek oturum testi)
+- Belgeler: `docs/architecture/{02,03,05,06,07,08}`
+- Değişmeyen: bağımlılıklar/`uv.lock` (yeni paket yok), Docker/CI dosyaları
 
 ## Migration durumu
-- Faz 0/1: `accounts.0001`, `catalog.0001`, `catalog.0002_seed_units`
-- Yeni: `catalog.0003_allergens`, `core.0001_idempotency`, `recipes.0001_initial`, `purchasing.0001_initial`, `inventory.0001_initial`, `inventory.0002_initial` (purchasing ↔ inventory FK'leri bu yüzden iki parça)
-- Sandbox'ta doğrulandı: boş DB'ye `migrate`, `inventory/purchasing/recipes/core zero` ve `catalog 0002`'ye geri alma, yeniden `migrate`; `makemigrations --check --dry-run` temiz. **Kullanıcının Docker ortamında uygulanmadı.**
+- Önceki: `accounts.0001`, `catalog.0001–0003`, `core.0001_idempotency`, `recipes.0001`, `purchasing.0001`, `inventory.0001–0002`
+- Yeni: `accounts.0002_roleassignment`, `orders.0001_initial`
+- Sandbox'ta: boş DB'ye tüm migration'lar uygulandı (test veritabanı oluşturuldu); `makemigrations --check --dry-run` temiz. Geri alma (zero) bu oturumda **denenmedi**. **Kullanıcının Docker ortamında uygulanmadı.**
 
 ## Test durumu
 **Sandbox** (Python 3.12.3, PostgreSQL 16, Django 5.2; bu oturumda çalıştırıldı):
-- `pytest`: **414 geçti, 0 başarısız** (192 önceki + yeni catalog/core/recipes/purchasing/inventory testleri)
+- `pytest`: **660 geçti, 0 başarısız** (önceki 414 + roller/kimlik/erişim matrisi + orders + kayıt)
 - `ruff check` ve `ruff format --check`: temiz
 - `makemigrations --check --dry-run`: değişiklik yok
 - `spectacular --validate --fail-on-warn`: geçti
-- Gerçek eşzamanlılık testleri (`transaction=True`, ayrı bağlantılar/thread'ler): 20 paralel rezervasyon/1000 g stok → tam 10 başarılı; çok lotlu paralel rezervasyon; aynı tüketicinin paralel tekrarı tek rezervasyon; paralel tüketim/serbest bırakma tek etki; düzeltme ↔ rezervasyon yarışı; paralel mal kabulde fazla teslimat reddi; paralel reçete onayı sonunda tek `approved`.
+- Yeni test alanları: rol→izin tablosu (onaylı satırlar dahil); giriş/çıkış/`me`, tek tip giriş hatası, CSRF (anonim giriş ve oturumlu yazma), oturum anahtarı yenileme, adres/e-posta hız sınırı; rol × endpoint okuma/yazma matrisi; kimliksiz 401 / yetkisiz 403 / başkasının nesnesi 404; sipariş fiyat/reçete/adres snapshot'ı, toplu rezervasyon, hepsi-ya-hiç geri alma (deterministik malzeme sırasıyla), idempotent tekrar ve çakışma, stok sızıntısı yok, iptal (süre sınırı, arka ofis gerekçesi, rezervasyon iadesi); kayıt (rol sızdırma yok, parola/e-posta/telefon doğrulama, CSRF, hız sınırı, paralel kayıtta tek hesap); gerçek eşzamanlılık: 15 paralel sipariş/1000 g stok → tam 5 başarılı ve tutarlı sipariş numaraları, 6 paralel iptal → tek etki.
 
-**Docker (kullanıcı makinesi) ve GitHub Actions:** henüz çalıştırılmadı. Komutlar: `docker compose run --rm backend python manage.py migrate`, `… pytest`, `… ruff check .`, `… ruff format --check .`, `… python manage.py makemigrations --check --dry-run`, `… python manage.py spectacular --validate --fail-on-warn --file /dev/null`.
+**Docker (kullanıcı makinesi) ve GitHub Actions:** bu oturumun kodu için henüz çalıştırılmadı. Komutlar: `docker compose run --rm backend python manage.py migrate`, `… pytest`, `… ruff check .`, `… ruff format --check .`, `… python manage.py makemigrations --check --dry-run`, `… python manage.py spectacular --validate --fail-on-warn --file /dev/null`.
 
-**Test edilmeyenler:** yük/performans (özellikle `reserve_stock`'un aday kilitleme maliyeti ~600 sipariş/hafta profilinde); gerçek oturum/CSRF akışı (testler `force_authenticate`); süre sonu rezervasyon zamanlayıcısı (yalnızca komut test edildi); yedekten geri yükleme.
+**Test edilmeyenler:** tarayıcıdan gerçek oturum/CSRF akışı (testler Django/DRF istemcisiyle; çerez bayrakları yanıtta kontrol edildi); birden çok süreçte hız sınırı (yerel önbellek); yük/performans (`reserve_stock` aday kilitleme maliyeti, ~600 sipariş/hafta); süre sonu rezervasyon zamanlayıcısı; yedekten geri yükleme; `orders` migration geri alma.
 
 ## Ortamla ilgili notlar
 - Windows'ta `127.0.0.1:5432` kullanılamazsa `.env` içinde `POSTGRES_HOST_PORT=55432`.
 - Windows/Git Bash'te `make` yok; `docker compose run --rm backend ...` kullanılır.
 - Yeni migration'lar için: `docker compose run --rm backend python manage.py migrate`.
-- Yeni izinler (`inventory.adjust_stock/release_lot/block_lot`, `purchasing.reverse_goodsreceipt`) migration ile oluşur; süper kullanıcı hepsine sahiptir, diğer personel için Django admin'den atanır.
+- API yetkisi artık rol tabanlı (ADR-013): ilk `ADMIN` için `docker compose run --rm backend python manage.py createsuperuser`, sonra Django admin'de kullanıcının sayfasından rol (inline) ekleyin. Süper kullanıcı bayrağı API'de yetki vermez. Eski Django model izinleri (`inventory.adjust_stock` vb.) modellerde durur ama API kullanmaz.
+
 
 ## Açık sorunlar ve ürün kararları
 - ADR-007…012 onaylandı. Gözden geçirilecek varsayım: %10 fazla-teslimat toleransı (gerçek tedarikçi verisiyle).
-- **Kimlik doğrulama ve roller: karara bağlandı (ADR-013), uygulanmadı.** Tüm endpoint'ler hâlâ geçici `is_staff` + Django model izinleri kullanıyor. ADR-013: web için oturum çerezi + CSRF, mobil için token (Faz 6), `RoleAssignment` + koda sabit rol→izin eşlemesi, kimliksiz istek 401, giriş hız sınırı, personel MFA Faz 7 öncesi. Müşteri kaydı/e-posta doğrulama/telefon benzersizliği Faz 3 başında karara bağlanacak.
-- **Rezervasyon süresi** (00 §8): ürün kararı yok; `expires_at` isteğe bağlı, zamanlayıcı yok. Faz 3'te sipariş onayı ile birlikte netleşmeli (Celery/cron gerekebilir).
+- **Kimlik ve roller: uygulandı (ADR-013).** Tablonun ürün sahibinin vermediği satırları onun bıraktığı yetkiyle belirlendi (05 §1). İlk `ADMIN` Django admin'de rol verilerek oluşturulur (süper kullanıcı API'de yetkisizdir). Rol değişikliği denetim izi yok. **CORS yok** ve gerekmeyecek (ADR-016: aynı origin proxy). Hız sınırı için çok süreçte Redis gerekir. Personel MFA Faz 7 öncesi hedef.
+- **ADR-014 onaylı; çalışma varsayımları gözden geçirilecek:** onay anında rezervasyon (süre/zamanlayıcı yok); sipariş adedi = 1 `pcs`, adet-bazlı reçete şart; teslimat en erken yarın; müşteri iptali teslimattan ≥1 gün önce, arka ofis gerekçeyle her zaman; vergi ve teslimat ücreti `0`; ödeme yok (`pending_payment` durumu ödeme kararıyla gelecek).
+- **E-posta doğrulaması ve parola sıfırlama (ADR-015):** yok; ikisi de e-posta altyapısı ister (Faz 6 bildirimleri). **Parolasını unutan müşteri hesabına dönemez; pilot öncesi zorunlu.** Kayıt, bir e-postanın kayıtlı olduğunu gizleyemez (hız sınırıyla azaltıldı).
+- **Teslimat bölgesi/günleri/saat pencereleri** doğrulanmıyor (00 §8).
 - **Tesis sayısı** (00 §8): tek tesis varsayıldı.
 - **Fazla teslimat toleransı %10** geçici varsayım.
 - **Audit:** `audit` modülü yok; kalite değişiklikleri `LotQualityEvent`'te, stok değişiklikleri defterde. Fiyat/SKU/aktiflik ve reçete onayı için genel denetim izi yok.
-- **Reçete ↔ stok bağı:** `recipes.requirements` malzeme ihtiyacını hesaplar ama stokla karşılaştırmaz/rezerve etmez; bu Faz 3/4 işi (sipariş → reçete sürümü snapshot'ı → rezervasyon).
+- **Reçete ↔ stok bağı:** sipariş artık onaylı reçete sürümünü dondurur ve ihtiyacı rezerve eder (ADR-014). Üretim planında gerçekleşen tüketim ve rezervasyon bağlantısı Faz 4.
 - **Alerjen listesi** boş başlar; hangi alerjenlerin beyan edileceği ve etiket yükümlülükleri ülke/hukuk doğrulaması ister (05 §4). Türetilmiş reçete alerjen özeti yasal etiket değildir.
 - Para birimi kümesi, vergi, `LANGUAGE_CODE`, üretim ayarları, ödeme sağlayıcısı, gıda güvenliği saklama süreleri, offline kapsamı, RPO/RTO, yük testi profili (değişmedi).
 - Katalog/PO/lot kayıtları silinmez (PROTECT); düzeltme için pasife alma / ters kayıt kullanılır.
 - Django admin: stok, reçete, PO ve mal kabul **salt okunur** (ledger/durum makinesini aşmasın diye); yalnızca tedarikçi ve alerjen/katalog kayıtları düzenlenebilir.
 
+
 ## Sonraki görev
-1. **Backend: kimlik ve roller (ADR-013)** — `accounts.RoleAssignment`, `POST /auth/login/`, `POST /auth/logout/`, `GET /me/`, giriş hız sınırı, kimliksiz isteklerde 401, rol→izin eşlemesinin tablo olarak yazılıp test edilmesi, `IsCatalogAdmin`/`IsBackOfficeStaff`/`staff_with_permission`'ın rol tabanlı hâlle değiştirilmesi (yalnızca bu sınıflar). Başlamadan önce rol→izin eşleme tablosu kısaca onaylanır.
-2. **Next.js Admin temel ekranları** (Faz 1'in kalanı): giriş, katalog/malzeme/alerjen, reçete, tedarikçi/sipariş/mal kabul, stok/lot. İstemci tipleri OpenAPI şemasından üretilir (09 §4). `web/` veya `admin/` klasörü ve araç seçimi (paket yöneticisi, UI kütüphanesi) ayrı bir kısa ADR gerektirir.
-3. Faz 3: Order/OrderLine, fiyat snapshot'ı, durum makinesi, sipariş → `reserve_stock` entegrasyonu. Önce 00 §8'deki sipariş onayı/rezervasyon süresi ve müşteri kaydı kararları alınmalı.
+1. **Docker/CI doğrulaması:** `docker compose run --rm backend pytest -q` ve lint/şema/migration komutları (yukarıda); çıktı paylaşılır.
+2. **Next.js iskeleti (ADR-016):** pnpm workspace, `web/` ve `admin/`, `packages/api-client` (OpenAPI'den tip üretimi), `/api` rewrite, CI'ya Node job'ı. Önce giriş/kayıt ve `/me/` ile rol bazlı kabuk; sonra Admin katalog ekranları ve müşteri sipariş akışı.
+3. Faz 4 hazırlığı: sipariş talep özeti (teslimat tarihine göre `confirmed` siparişlerin toplam ihtiyacı).
+4. Pilot öncesi zorunlular: e-posta doğrulama + parola sıfırlama (Faz 6 bildirimleri), personel MFA, ödeme kararı.
 
 ## Oturum sonu özeti
-- Tamamlanan: alerjen, reçete (recipes), tedarik (purchasing), stok (inventory), ortak idempotency/hata altyapısı, belgeler
-- Eklenen migration'lar: `catalog.0003_allergens`, `core.0001_idempotency`, `recipes.0001_initial`, `purchasing.0001_initial`, `inventory.0001_initial`, `inventory.0002_initial`
-- Açık hatalar: bilinen yok; Docker/CI doğrulaması bekliyor
-- Bu oturumda yakalanıp düzeltilen gerçek hatalar: reçete satırı CHECK kısıtının NULL durumunu kaçırması; satır değiştirirken eski satırlarla benzersizlik çakışması
-- Sıradaki tek görev: kimlik ve roller (ADR-013) backend uygulaması, ardından Next.js Admin
+- Tamamlanan: ADR-013 backend (roller, oturum, hız sınırı, 401, rol tabanlı izinler), Faz 3 backend (sipariş/iptal/adres, rezervasyon), müşteri kaydı (ADR-015), Next.js araç kararı (ADR-016); belgeler
+- Eklenen migration'lar: `accounts.0002_roleassignment`, `orders.0001_initial`
+- Açık hatalar: bilinen yok; Docker/CI'da yalnızca `migrate` doğrulandı (kullanıcı bildirimi); pytest/ruff/şema çıktısı bekliyor
+- Bu oturumda yakalanıp düzeltilen gerçek hatalar: `login()` aynı kullanıcının oturumunu yenilemez (oturum sabitleme testi anonim oturumla yeniden yazıldı); Django admin kullanıcı ekleme formu yeni rol inline'ının yönetim alanlarını istiyor
+- Sıradaki: Docker/CI test çıktısı, sonra Next.js iskeleti (ADR-016)

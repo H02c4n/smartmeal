@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 
+from apps.accounts.roles import Role
 from apps.inventory.models import InventoryLot
 from apps.purchasing import services
 from apps.purchasing.models import GoodsReceipt
@@ -208,28 +209,36 @@ def test_receipt_against_a_draft_order_is_a_state_error(
     assert response.json()["error"]["code"] == "INVALID_STATE_TRANSITION"
 
 
-def test_reversing_a_receipt_needs_the_special_permission(staff_client, submitted_po, grant):
+def test_reversing_a_receipt_is_an_admin_decision(staff_client, client_for, submitted_po):
     receipt = staff_client.post(RECEIPTS, receipt_body(submitted_po), format="json", **KEY).json()
     url = f"{RECEIPTS}{receipt['id']}/reverse/"
-    assert staff_client.post(url, {"reason": "Wrong delivery"}, format="json").status_code == 403
-    staff_client.force_authenticate(grant("purchasing.reverse_goodsreceipt"))
-    missing_reason = staff_client.post(url, {}, format="json")
+    for role in (Role.PURCHASING, Role.QUALITY, Role.PLANNER, Role.FINANCE):
+        denied = client_for(role).post(url, {"reason": "Wrong delivery"}, format="json")
+        assert denied.status_code == 403, role
+    admin = client_for(Role.ADMIN)
+    missing_reason = admin.post(url, {}, format="json")
     assert missing_reason.status_code == 400
-    done = staff_client.post(url, {"reason": "Wrong delivery"}, format="json")
+    done = admin.post(url, {"reason": "Wrong delivery"}, format="json")
     assert done.status_code == 200
     assert done.json()["status"] == "reversed"
     assert InventoryLot.objects.get().on_hand == 0
-    assert staff_client.post(url, {"reason": "Wrong delivery"}, format="json").status_code == 200
+    assert admin.post(url, {"reason": "Wrong delivery"}, format="json").status_code == 200
 
 
-def test_superuser_may_reverse_without_explicit_grant(
-    api_client, superuser, submitted_po, staff_client
-):
-    receipt = staff_client.post(RECEIPTS, receipt_body(submitted_po), format="json", **KEY).json()
-    api_client.force_authenticate(superuser)
-    superuser.is_staff = True
-    superuser.save()
-    response = api_client.post(
-        f"{RECEIPTS}{receipt['id']}/reverse/", {"reason": "Mistake"}, format="json"
+def test_purchasing_reads_and_writes_are_separate_permissions(client_for, supplier):
+    # FINANCE and ADMIN may look at purchasing data but not change it.
+    for role in (Role.FINANCE, Role.ADMIN):
+        client = client_for(role)
+        assert client.get(SUPPLIERS).status_code == 200, role
+        assert client.post(SUPPLIERS, {"name": "X AB"}, format="json").status_code == 403, role
+    assert (
+        client_for(Role.PURCHASING)
+        .post(SUPPLIERS, {"name": "Second AB"}, format="json")
+        .status_code
+        == 201
     )
-    assert response.status_code == 200
+
+
+def test_superuser_without_roles_has_no_api_access(api_client, superuser, submitted_po):
+    api_client.force_authenticate(superuser)  # Django superuser flag grants nothing here
+    assert api_client.get(SUPPLIERS).status_code == 403

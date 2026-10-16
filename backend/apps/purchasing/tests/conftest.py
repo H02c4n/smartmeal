@@ -2,7 +2,6 @@ from apps.inventory.tests.conftest import (  # noqa: F401  # noqa: F401, E402
     egg,
     flour,
     gram,
-    grant,
     kilogram,
     litre,
     make_released_lot,

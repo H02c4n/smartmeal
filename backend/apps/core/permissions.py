@@ -1,30 +1,61 @@
-"""Shared permission building blocks.
+"""Shared permission building blocks (ADR-013).
 
-PLACEHOLDER (ADR-009/010): business roles (``RoleAssignment``) and the auth strategy are not
-decided yet. Until then back-office endpoints require ``is_staff`` and, for the sensitive
-operations 05 §1 reserves for special permission (stock adjustment, lot release/block, receipt
-reversal), an explicit Django model permission granted by an administrator. Superusers hold
-every permission. Replace these with role-based permissions once roles exist.
+Role-based and deny-by-default: access comes only from the fixed role -> permission table in
+``apps.accounts.roles``. ``is_staff`` and Django model permissions play no part in API
+authorisation any more (``is_staff`` only opens the Django admin).
+
+Object/ownership scope (a customer's own orders, a courier's assigned stops) is NOT decided
+here; the owning module narrows its queryset or adds an object-level check.
 """
 
-from rest_framework.permissions import BasePermission, IsAdminUser
+from __future__ import annotations
+
+from rest_framework.permissions import SAFE_METHODS, BasePermission
+
+from apps.accounts.roles import permissions_for_roles
+
+_CACHE_ATTR = "_smartmeal_permissions"
 
 
-class IsBackOfficeStaff(IsAdminUser):
-    """Authenticated ``is_staff`` user (placeholder for a role check)."""
+def user_permissions(request) -> frozenset[str]:
+    """Permissions granted by the requester's roles (one query per request, then cached)."""
+    cached = getattr(request, _CACHE_ATTR, None)
+    if cached is None:
+        user = request.user
+        if not (user and user.is_authenticated):
+            cached = frozenset()
+        else:
+            cached = permissions_for_roles(
+                user.role_assignments.values_list("role_code", flat=True)
+            )
+        setattr(request, _CACHE_ATTR, cached)
+    return cached
 
 
-def staff_with_permission(codename: str) -> type[BasePermission]:
-    """Permission class: staff user holding the Django permission ``app_label.codename``."""
+def has_permission(code: str) -> type[BasePermission]:
+    """Permission class: authenticated user whose roles grant ``code``."""
 
-    class _StaffWithPermission(BasePermission):
-        message = f"This action requires the '{codename}' permission."
+    class _HasPermission(BasePermission):
+        message = f"This action requires the '{code}' permission."
 
         def has_permission(self, request, view) -> bool:
-            user = request.user
-            return bool(
-                user and user.is_authenticated and user.is_staff and user.has_perm(codename)
-            )
+            return code in user_permissions(request)
 
-    _StaffWithPermission.__name__ = f"StaffWith_{codename.replace('.', '_')}"
-    return _StaffWithPermission
+    _HasPermission.__name__ = f"Has_{code.replace(':', '_')}"
+    return _HasPermission
+
+
+def has_permission_by_method(*, read: str, write: str) -> type[BasePermission]:
+    """``read`` for GET/HEAD/OPTIONS, ``write`` for every other method."""
+
+    class _ByMethod(BasePermission):
+        def has_permission(self, request, view) -> bool:
+            required = read if request.method in SAFE_METHODS else write
+            return required in user_permissions(request)
+
+        @property
+        def message(self) -> str:
+            return f"This action requires the '{read}' or '{write}' permission."
+
+    _ByMethod.__name__ = f"ByMethod_{read.replace(':', '_')}_{write.replace(':', '_')}"
+    return _ByMethod

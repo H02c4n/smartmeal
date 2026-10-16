@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.forms import AdminUserCreationForm, UserChangeForm
 
-from .models import User
+from .models import RoleAssignment, User
 
 
 class UserCreationForm(AdminUserCreationForm):
@@ -17,11 +17,19 @@ class UserEditForm(UserChangeForm):
         fields = "__all__"
 
 
+class RoleAssignmentInline(admin.TabularInline):
+    model = RoleAssignment
+    extra = 0
+    fields = ("role_code", "created_at")
+    readonly_fields = ("created_at",)
+
+
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     add_form = UserCreationForm
     form = UserEditForm
     ordering = ("email",)
+    inlines = (RoleAssignmentInline,)
     list_display = ("email", "phone", "is_active", "is_staff", "created_at")
     list_filter = ("is_active", "is_staff", "is_superuser")
     search_fields = ("email", "phone")

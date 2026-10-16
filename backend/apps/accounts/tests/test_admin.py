@@ -25,12 +25,18 @@ def test_superuser_can_create_user_via_admin_add_form(client, superuser):
             "usable_password": "true",
             "password1": "an-Unusual-pass-9731",
             "password2": "an-Unusual-pass-9731",
+            # Role inline management form (no roles assigned at creation).
+            "role_assignments-TOTAL_FORMS": "0",
+            "role_assignments-INITIAL_FORMS": "0",
+            "role_assignments-MIN_NUM_FORMS": "0",
+            "role_assignments-MAX_NUM_FORMS": "1000",
         },
     )
     assert response.status_code == 302, getattr(response, "context", None)
     created = User.objects.get(email="created@example.com")
     assert created.phone == "+46700000000"
     assert created.check_password("an-Unusual-pass-9731")
+    assert not created.role_assignments.exists()  # roles are granted deliberately, never by default
 
 
 def test_regular_user_cannot_use_admin(client, user):

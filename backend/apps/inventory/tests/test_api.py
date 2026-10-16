@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+from apps.accounts.roles import Role
 from apps.inventory import services
 from apps.inventory.models import InventoryLot, StockMovement
 
@@ -73,25 +74,21 @@ def test_lots_are_listed_earliest_expiry_first(staff_client, make_released_lot):
 
 
 # --- Release / block need special permissions -----------------------------------------------
-def test_release_and_block_require_their_permissions(staff_client, receive, grant):
+def test_release_and_block_are_quality_decisions(client_for, receive):
     lot = receive("10", "SUP-A")
     release = f"{LOTS}{lot.pk}/release/"
     block = f"{LOTS}{lot.pk}/block/"
-    assert staff_client.post(release, {"reason": "ok"}, format="json").status_code == 403
-    assert staff_client.post(block, {"reason": "bad"}, format="json").status_code == 403
-    user = grant("inventory.release_lot")
-    staff_client.force_authenticate(user)
-    assert staff_client.post(release, {}, format="json").status_code == 400  # reason required
-    done = staff_client.post(release, {"reason": "Temperature OK"}, format="json")
+    for role in (Role.ADMIN, Role.PURCHASING, Role.PLANNER, Role.PRODUCTION, Role.CUSTOMER):
+        client = client_for(role)
+        assert client.post(release, {"reason": "ok"}, format="json").status_code == 403, role
+        assert client.post(block, {"reason": "bad"}, format="json").status_code == 403, role
+    quality = client_for(Role.QUALITY)
+    assert quality.post(release, {}, format="json").status_code == 400  # reason required
+    done = quality.post(release, {"reason": "Temperature OK"}, format="json")
     assert done.status_code == 200 and done.json()["quality_status"] == "released"
-    assert (
-        staff_client.post(block, {"reason": "bad"}, format="json").status_code == 403
-    )  # no block perm
-    user = grant("inventory.block_lot")
-    staff_client.force_authenticate(user)
-    blocked = staff_client.post(block, {"reason": "Recall"}, format="json")
+    blocked = quality.post(block, {"reason": "Recall"}, format="json")
     assert blocked.json()["quality_status"] == "blocked"
-    assert staff_client.post(block, {"reason": "Recall"}, format="json").status_code == 200
+    assert quality.post(block, {"reason": "Recall"}, format="json").status_code == 200
 
 
 # --- Adjustments ----------------------------------------------------------------------------
@@ -99,10 +96,11 @@ def adjustment(lot, quantity="-1", unit="kg", reason="Stock count", **extra):
     return {"lot": str(lot.pk), "quantity": quantity, "unit": unit, "reason": reason, **extra}
 
 
-def test_adjustment_needs_permission_key_and_reason(staff_client, make_released_lot, grant):
+def test_adjustment_needs_permission_key_and_reason(staff_client, client_for, make_released_lot):
     lot = make_released_lot("10", "SUP-A")
-    assert staff_client.post(ADJUSTMENTS, adjustment(lot), format="json", **KEY).status_code == 403
-    staff_client.force_authenticate(grant("inventory.adjust_stock"))
+    for role in (Role.PLANNER, Role.PURCHASING, Role.QUALITY):
+        denied = client_for(role).post(ADJUSTMENTS, adjustment(lot), format="json", **KEY)
+        assert denied.status_code == 403, role
     no_key = staff_client.post(ADJUSTMENTS, adjustment(lot), format="json")
     assert no_key.status_code == 400 and "Idempotency-Key" in no_key.json()["error"]["details"]
     no_reason = staff_client.post(ADJUSTMENTS, adjustment(lot, reason=""), format="json", **KEY)
@@ -112,9 +110,8 @@ def test_adjustment_needs_permission_key_and_reason(staff_client, make_released_
     assert InventoryLot.objects.get().on_hand == Decimal("10000.0000")
 
 
-def test_adjustment_is_applied_once_per_key(staff_client, make_released_lot, grant):
+def test_adjustment_is_applied_once_per_key(staff_client, make_released_lot):
     lot = make_released_lot("10", "SUP-A")
-    staff_client.force_authenticate(grant("inventory.adjust_stock"))
     first = staff_client.post(ADJUSTMENTS, adjustment(lot, "-2"), format="json", **KEY)
     again = staff_client.post(ADJUSTMENTS, adjustment(lot, "-2"), format="json", **KEY)
     assert (first.status_code, again.status_code) == (201, 200)
@@ -126,9 +123,7 @@ def test_adjustment_is_applied_once_per_key(staff_client, make_released_lot, gra
     assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
 
 
-def test_adjustment_cannot_remove_reserved_stock(
-    staff_client, make_released_lot, grant, flour, gram
-):
+def test_adjustment_cannot_remove_reserved_stock(staff_client, make_released_lot, flour, gram):
     lot = make_released_lot("1", "SUP-A")
     services.reserve_stock(
         ingredient=flour,
@@ -137,7 +132,6 @@ def test_adjustment_cannot_remove_reserved_stock(
         reference_type="order",
         reference_id=uuid4(),
     )
-    staff_client.force_authenticate(grant("inventory.adjust_stock"))
     response = staff_client.post(ADJUSTMENTS, adjustment(lot, "-500", "g"), format="json", **KEY)
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "INSUFFICIENT_STOCK"
@@ -165,14 +159,15 @@ def test_ledger_is_listed_and_filterable_and_read_only(
         )
 
 
-def test_reverse_movement_via_api(staff_client, make_released_lot, staff_user, gram, grant):
+def test_reverse_movement_via_api(staff_client, client_for, make_released_lot, staff_user, gram):
     lot = make_released_lot("1", "SUP-A")
     movement = services.adjust_stock(
         lot, quantity=Decimal("-10"), unit=gram, reason="Spill", actor=staff_user
     )
     url = f"{MOVEMENTS}{movement.pk}/reverse/"
-    assert staff_client.post(url, {"reason": "Mistake"}, format="json").status_code == 403
-    staff_client.force_authenticate(grant("inventory.adjust_stock"))
+    assert (
+        client_for(Role.PLANNER).post(url, {"reason": "Mistake"}, format="json").status_code == 403
+    )
     done = staff_client.post(url, {"reason": "Mistake"}, format="json")
     assert done.status_code == 201
     assert done.json()["reverses"] == str(movement.pk)

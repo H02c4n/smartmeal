@@ -10,6 +10,25 @@
 - Stok düzeltme, lot serbest bırakma, iade, rol değişikliği ve audit erişimi özel izin gerektirir.
 - Yetki kontrolleri varsayılan olarak kapalı değil, açıkça izin verilen yaklaşımda tasarlanır.
 
+**Rol → izin eşlemesi (uygulandı, ADR-013; kaynak: `apps/accounts/roles.py`, testli).** `ADMIN` süper rol **değildir**; yalnızca aşağıda yazılanları ve tüm okumaları taşır. Django `is_staff`/süper kullanıcı API'de hiçbir yetki vermez (yalnızca Django admin ve şema/dokümantasyon sayfası).
+
+| İzin | Roller |
+|---|---|
+| `catalog:read` | ADMIN, PURCHASING, QUALITY, PLANNER, PRODUCTION, PACKING, SUPPORT |
+| `catalog:manage` (katalog ve reçete yönetimi) | ADMIN |
+| `purchasing:read` | ADMIN, PURCHASING, FINANCE |
+| `purchasing:manage` (tedarikçi, sipariş, mal kabul) | PURCHASING |
+| `purchasing:reverse_receipt` | ADMIN |
+| `inventory:read` | ADMIN, PURCHASING, QUALITY, PLANNER, PRODUCTION |
+| `inventory:reserve` (rezervasyon ve tüketim) | PLANNER, PRODUCTION |
+| `inventory:release_lot`, `inventory:block_lot` | QUALITY |
+| `inventory:adjust_stock` (düzeltme, ters hareket) | ADMIN |
+| `orders:place` (kendi siparişi ve adresleri) | CUSTOMER |
+| `orders:read_all` | ADMIN, PLANNER, PRODUCTION, PACKING, SUPPORT, FINANCE |
+| `orders:cancel_any` | ADMIN, SUPPORT |
+
+`DRIVER` şimdilik izinsizdir (kurye erişimi atanmış teslimatlarla sınırlı olacak, Faz 6). Ürün sahibi onaylı satırlar: katalog/reçete, tedarik/mal kabul, lot release/block, stok düzeltme ve ters kayıt, rezervasyon/tüketim, mal kabul ters kaydı. Geri kalan satırlar (okuma erişimi, `PACKING`/`SUPPORT`/`FINANCE`, sipariş izinleri) ürün sahibinin bıraktığı yetkiyle en az ayrıcalık ilkesine göre belirlendi (2026-10-16); gerçek iş akışları netleştikçe gözden geçirilir.
+
 ## 2. Stok bütünlüğü
 
 - Stok değişimleri `StockMovement` hareket defterine kaydedilir.

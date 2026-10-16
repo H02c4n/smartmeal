@@ -19,10 +19,10 @@ Bu doküman ilk mantıksal modeldir. Alan türleri, null kuralları, indeksler v
 
 Django custom user modeli ilk migration'dan önce oluşturulmalıdır.
 
-### `RoleAssignment`
-Alanlar: `id`, `user_id`, `role_code`, `site_id` (tesis kapsamı gerekiyorsa), `created_at`.
+### `RoleAssignment` (ADR-013 — uygulandı)
+Alanlar: `id`, `user_id`, `role_code`, `created_at`, `updated_at`; `(user, role_code)` benzersiz. Tek tesis olduğu için `site_id` yok (ADR-012 §8). Tablo: `accounts_role_assignment`.
 
-Roller örnek: `CUSTOMER`, `ADMIN`, `PLANNER`, `PURCHASING`, `PRODUCTION`, `QUALITY`, `PACKING`, `DRIVER`, `SUPPORT`, `FINANCE`. Gerçek yetkiler role adıyla sınırlı kalmamalı; işlem ve nesne kapsamı da kontrol edilmelidir.
+Roller: `CUSTOMER`, `ADMIN`, `PLANNER`, `PURCHASING`, `PRODUCTION`, `QUALITY`, `PACKING`, `DRIVER`, `SUPPORT`, `FINANCE`. Kullanıcıya rol, Django admin'deki kullanıcı sayfasından (inline) verilir; hiçbir rol otomatik atanmaz. **Rol → izin eşlemesi koddadır** (`apps/accounts/roles.py`, değişmez, `accounts/tests/test_roles.py` ile sabitlenmiş); özet 05 §1'de. Rol tek başına yetmez: nesne kapsamı (müşterinin kendi siparişi/adresi) ilgili modülün sorgusunda uygulanır.
 
 ## 3. Katalog ve reçete
 
@@ -99,13 +99,22 @@ Malzeme başına, taban birimde:
 
 ## 5. Sipariş
 
-### `Order`
-`id`, `order_number`, `customer_id`, `status`, `delivery_date`, `delivery_address_snapshot`, `currency`, `subtotal`, `tax_amount`, `delivery_fee`, `total_amount`, `created_at`, `confirmed_at`, `cancelled_at`.
+### `Order` (ADR-014 — uygulandı, geçici varsayımlarla)
+`id`, `order_number` (`SM-YYYYMMDD-NNNN`, gün bazlı sayaç, sipariş işlemiyle birlikte geri alınır), `customer_id`, `status` (`confirmed`, `cancelled`; sonraki fazlar durum ekler), `delivery_date`, `delivery_address_snapshot` (JSON), `currency`, `subtotal`, `tax_amount`, `delivery_fee`, `total_amount`, `created_at`, `confirmed_at`, `cancelled_at`, `cancelled_by_id`, `cancellation_reason`.
 
-Adres snapshot'ı, müşteri adresini sonradan değiştirse bile geçmiş siparişin teslimat adresini korur.
+Adres snapshot'ı, müşteri adresini sonradan değiştirse bile geçmiş siparişin teslimat adresini korur. `tax_amount` ve `delivery_fee` kararlar gelene kadar `0`'dır (sütunlar hazır). CHECK kısıtları: tutarlar negatif olamaz, `total = subtotal + tax + fee`, `cancelled_at` yalnızca iptalde dolu.
 
 ### `OrderLine`
-`id`, `order_id`, `product_id`, `product_name_snapshot`, `quantity`, `unit_price`, `line_total`, `recipe_version_id`.
+`id`, `order_id`, `product_id`, `product_sku_snapshot`, `product_name_snapshot`, `quantity`, `unit_price`, `line_total`, `recipe_version_id` (sipariş anında onaylı sürüm). Değiştirilemez/silinemez (kod düzeyinde); `(order, product)` benzersiz; `line_total = unit_price × quantity` CHECK.
+
+### `OrderStatusEvent`
+`id`, `order_id`, `from_status` (oluşturmada boş), `to_status`, `reason`, `actor_id`, `created_at`. Yalnızca-ekleme.
+
+### `CustomerAddress`
+`id`, `user_id`, `recipient_name`, `line1`, `line2`, `postal_code`, `city`, `country_code` (ISO-2), `phone`. Müşteri başına en çok `ADDRESS_MAX_PER_CUSTOMER` (varsayılan 10). Teslimat bölgesi doğrulaması yok (açık karar). Sipariş adresi kopyalar; adres silinince geçmiş sipariş değişmez.
+
+### `OrderNumberCounter`
+`day` (PK), `last_number`. Yalnızca sipariş numarası üretimi içindir.
 
 ### `Payment`
 `id`, `order_id`, `provider`, `provider_reference`, `status`, `amount`, `currency`, `created_at`.

@@ -12,3 +12,7 @@ SPECTACULAR_SETTINGS = {
     **SPECTACULAR_SETTINGS,  # noqa: F405
     "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
 }
+
+# Plain-http local development: cookies cannot be Secure (production defaults to Secure).
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False

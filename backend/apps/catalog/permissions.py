@@ -1,11 +1,11 @@
-from rest_framework.permissions import IsAdminUser
+from apps.accounts.roles import Perm
+from apps.core.permissions import has_permission_by_method
 
 
-class IsCatalogAdmin(IsAdminUser):
-    """May manage catalog master data.
+class IsCatalogAdmin(has_permission_by_method(read=Perm.CATALOG_READ, write=Perm.CATALOG_MANAGE)):
+    """Back-office catalog and recipe endpoints (ADR-013).
 
-    PLACEHOLDER: roles (``RoleAssignment``) do not exist yet and the auth strategy is still an
-    open decision (ADR-009/ADR-010), so this falls back to ``is_staff``. ``is_staff`` is meant
-    for the Django admin only; replace this class with a role-based permission as soon as roles
-    exist. Every catalog write endpoint goes through this single class on purpose.
+    Reading needs ``catalog:read`` (most operational roles); every write needs
+    ``catalog:manage`` (``ADMIN``). Every catalog/recipe back-office endpoint goes through this
+    single class on purpose. The name is kept from the placeholder era.
     """

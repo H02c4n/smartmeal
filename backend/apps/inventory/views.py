@@ -1,8 +1,9 @@
 """Inventory API (03_API_CONTRACTS, section "Stock and purchasing").
 
-Back-office only (placeholder ``IsBackOfficeStaff``, ADR-009/010). The sensitive operations that
-05 §1 reserves for special permission need an explicit Django permission: ``inventory.adjust_stock``
-(adjustments, movement reversal), ``inventory.release_lot``, ``inventory.block_lot``.
+Back-office only, role-based (ADR-013; table in ``apps.accounts.roles``): reading needs
+``inventory:read``, reservations ``inventory:reserve``, and the operations 05 §1 reserves for
+special permission need their own: ``inventory:adjust_stock`` (adjustments, movement reversal),
+``inventory:release_lot``, ``inventory:block_lot``.
 Stock-changing creates require an ``Idempotency-Key`` header.
 """
 
@@ -14,8 +15,9 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
+from apps.accounts.roles import Perm
 from apps.core.idempotency import request_key, run_idempotent
-from apps.core.permissions import IsBackOfficeStaff, staff_with_permission
+from apps.core.permissions import has_permission, has_permission_by_method
 from apps.core.serializers import ReasonSerializer
 
 from . import selectors, services
@@ -30,9 +32,11 @@ from .serializers import (
     ReservationSerializer,
 )
 
-CanAdjustStock = staff_with_permission("inventory.adjust_stock")
-CanReleaseLot = staff_with_permission("inventory.release_lot")
-CanBlockLot = staff_with_permission("inventory.block_lot")
+CanAdjustStock = has_permission(Perm.INVENTORY_ADJUST_STOCK)
+CanReleaseLot = has_permission(Perm.INVENTORY_RELEASE_LOT)
+CanBlockLot = has_permission(Perm.INVENTORY_BLOCK_LOT)
+CanReadInventory = has_permission(Perm.INVENTORY_READ)
+ReservationAccess = has_permission_by_method(read=Perm.INVENTORY_READ, write=Perm.INVENTORY_RESERVE)
 
 IDEMPOTENCY_HEADER = OpenApiParameter(
     "Idempotency-Key",
@@ -70,7 +74,7 @@ def _choice_param(request, name: str, allowed) -> str | None:
 class BalanceView(GenericAPIView):
     """Stock per ingredient in base units: physical, reserved, available, unavailable."""
 
-    permission_classes = [IsBackOfficeStaff]
+    permission_classes = [CanReadInventory]
     serializer_class = BalanceSerializer
 
     @extend_schema(parameters=[INGREDIENT_PARAM], responses={200: BalanceSerializer(many=True)})
@@ -104,7 +108,7 @@ class BalanceView(GenericAPIView):
     )
 )
 class LotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
-    permission_classes = [IsBackOfficeStaff]
+    permission_classes = [CanReadInventory]
     serializer_class = LotSerializer
 
     def get_permissions(self):
@@ -160,7 +164,7 @@ class LotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gene
 class MovementViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     """The append-only stock ledger."""
 
-    permission_classes = [IsBackOfficeStaff]
+    permission_classes = [CanReadInventory]
     serializer_class = MovementSerializer
 
     def get_permissions(self):
@@ -232,7 +236,7 @@ class AdjustmentView(GenericAPIView):
     )
 )
 class ReservationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
-    permission_classes = [IsBackOfficeStaff]
+    permission_classes = [ReservationAccess]
     serializer_class = ReservationSerializer
 
     def get_queryset(self):
