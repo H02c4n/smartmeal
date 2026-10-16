@@ -21,14 +21,14 @@
 - [x] **ADR-014 (sipariş akışı) Onaylandı** (2026-10-16, ürün sahibi); varsayımlar gerçek veriyle gözden geçirilecek
 - [x] **ADR-015 (müşteri kaydı)** Onaylandı ve uygulandı (backend): `POST /auth/register/`, yalnızca `CUSTOMER` rolü, oturum açar, hız sınırlı; e-posta doğrulaması ve parola sıfırlaması yok
 - [x] **ADR-016 (Next.js araçları)** Onaylandı, **uygulanmadı**: `web/` + `admin/`, pnpm workspace, aynı origin `/api` proxy (CORS yok), OpenAPI'den tip üretimi
-- [ ] Bu oturumun kodu kullanıcının Docker ortamında/CI'da henüz çalıştırılmadı
+- [x] Bu oturumun kodu kullanıcının Docker ortamında ve GitHub Actions'ta çalıştı (kullanıcı bildirimi)
 
 
 ## Faz durumu
 - Faz 0: **Tamamlandı**
 - Faz 1: **Backend tamamlandı** (kimlik ve roller dahil); kalan: **Next.js Admin temel ekranları**
 - Faz 2: **Backend tamamlandı** ve doğrulandı
-- Faz 3: **Backend uygulandı (sandbox testli; Docker'da migration uygulandı), ADR-014 onaylandı**; kalan: **Next.js müşteri web akışı** (ADR-016 ile araçlar belli)
+- Faz 3: **Backend uygulandı (sandbox, Docker ve GitHub Actions'ta doğrulandı), ADR-014 onaylandı**; kalan: **Next.js müşteri web akışı** (ADR-016 ile araçlar belli)
 - Faz 4–7: Bekliyor
 
 ## Son tamamlanan görev
@@ -64,7 +64,7 @@ Yok. Sıradaki: bkz. "Sonraki görev".
 - `spectacular --validate --fail-on-warn`: geçti
 - Yeni test alanları: rol→izin tablosu (onaylı satırlar dahil); giriş/çıkış/`me`, tek tip giriş hatası, CSRF (anonim giriş ve oturumlu yazma), oturum anahtarı yenileme, adres/e-posta hız sınırı; rol × endpoint okuma/yazma matrisi; kimliksiz 401 / yetkisiz 403 / başkasının nesnesi 404; sipariş fiyat/reçete/adres snapshot'ı, toplu rezervasyon, hepsi-ya-hiç geri alma (deterministik malzeme sırasıyla), idempotent tekrar ve çakışma, stok sızıntısı yok, iptal (süre sınırı, arka ofis gerekçesi, rezervasyon iadesi); kayıt (rol sızdırma yok, parola/e-posta/telefon doğrulama, CSRF, hız sınırı, paralel kayıtta tek hesap); gerçek eşzamanlılık: 15 paralel sipariş/1000 g stok → tam 5 başarılı ve tutarlı sipariş numaraları, 6 paralel iptal → tek etki.
 
-**Docker (kullanıcı makinesi) ve GitHub Actions:** bu oturumun kodu için henüz çalıştırılmadı. Komutlar: `docker compose run --rm backend python manage.py migrate`, `… pytest`, `… ruff check .`, `… ruff format --check .`, `… python manage.py makemigrations --check --dry-run`, `… python manage.py spectacular --validate --fail-on-warn --file /dev/null`.
+**Docker (kullanıcı makinesi) ve GitHub Actions:** `migrate` başarılı; `docker compose run --rm backend pytest -q` → **660 geçti** (kullanıcı çıktısı, sandbox ile aynı sayı); lint/format/migration/şema komutları ve GitHub Actions **başarılı** (kullanıcı bildirimi, 2026-10-16; ayrıntılı çıktılar görülmedi).
 
 **Test edilmeyenler:** tarayıcıdan gerçek oturum/CSRF akışı (testler Django/DRF istemcisiyle; çerez bayrakları yanıtta kontrol edildi); birden çok süreçte hız sınırı (yerel önbellek); yük/performans (`reserve_stock` aday kilitleme maliyeti, ~600 sipariş/hafta); süre sonu rezervasyon zamanlayıcısı; yedekten geri yükleme; `orders` migration geri alma.
 
@@ -92,7 +92,7 @@ Yok. Sıradaki: bkz. "Sonraki görev".
 
 
 ## Sonraki görev
-1. **Docker/CI doğrulaması:** `docker compose run --rm backend pytest -q` ve lint/şema/migration komutları (yukarıda); çıktı paylaşılır.
+1. ~~Docker/CI doğrulaması~~ **Tamamlandı** (kullanıcı bildirimi, 2026-10-16).
 2. **Next.js iskeleti (ADR-016):** pnpm workspace, `web/` ve `admin/`, `packages/api-client` (OpenAPI'den tip üretimi), `/api` rewrite, CI'ya Node job'ı. Önce giriş/kayıt ve `/me/` ile rol bazlı kabuk; sonra Admin katalog ekranları ve müşteri sipariş akışı.
 3. Faz 4 hazırlığı: sipariş talep özeti (teslimat tarihine göre `confirmed` siparişlerin toplam ihtiyacı).
 4. Pilot öncesi zorunlular: e-posta doğrulama + parola sıfırlama (Faz 6 bildirimleri), personel MFA, ödeme kararı.
@@ -100,6 +100,6 @@ Yok. Sıradaki: bkz. "Sonraki görev".
 ## Oturum sonu özeti
 - Tamamlanan: ADR-013 backend (roller, oturum, hız sınırı, 401, rol tabanlı izinler), Faz 3 backend (sipariş/iptal/adres, rezervasyon), müşteri kaydı (ADR-015), Next.js araç kararı (ADR-016); belgeler
 - Eklenen migration'lar: `accounts.0002_roleassignment`, `orders.0001_initial`
-- Açık hatalar: bilinen yok; Docker/CI'da yalnızca `migrate` doğrulandı (kullanıcı bildirimi); pytest/ruff/şema çıktısı bekliyor
+- Açık hatalar: bilinen yok; Docker ve GitHub Actions doğrulandı (kullanıcı bildirimi)
 - Bu oturumda yakalanıp düzeltilen gerçek hatalar: `login()` aynı kullanıcının oturumunu yenilemez (oturum sabitleme testi anonim oturumla yeniden yazıldı); Django admin kullanıcı ekleme formu yeni rol inline'ının yönetim alanlarını istiyor
-- Sıradaki: Docker/CI test çıktısı, sonra Next.js iskeleti (ADR-016)
+- Sıradaki: Next.js iskeleti (ADR-016), ayrı bir sohbette; başlangıç talimatı `docs/architecture/NEXTJS_CHAT_START_PROMPT.md`

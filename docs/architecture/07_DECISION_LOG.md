@@ -201,7 +201,7 @@ Karardan **bilinçli sapmalar ve eklemeler**:
 - **Gerekçe:** Aynı origin proxy, oturum çerezi stratejisini (ADR-013) basit ve güvenli tutar ve CORS yüzeyini ortadan kaldırır; üretilmiş tipler kontrat kaymasını erken yakalar.
 - **Etkilenen modüller/dosyalar (uygulamada):** yeni `web/`, `admin/`, `packages/api-client/`, kök `pnpm-workspace.yaml`, CI'ya Node job'ı, `docker-compose.yml` (geliştirme servisleri), `docs/architecture/{01,04,08,09}`.
 - **Migration/API etkisi:** Yok (backend değişmez).
-- **Bilinen riskler:** Next.js proxy ek bir sıçrama ekler; SSR'de çerez iletimi dikkat ister; Admin ve müşteri sitesi için ayrı kök alan adı/alt alan kararı dağıtımda netleşecek; çok sayıda üçüncü taraf paket (tedarik zinciri riski).
+- **Bilinen riskler:** Next.js proxy ek bir sıçrama ekler; SSR'de çerez iletimi dikkat ister; Admin ve müşteri sitesi için ayrı kök alan adı/alt alan kararı dağıtımda netleşecek; **geliştirmede `localhost:3000` ve `localhost:3001` çerez paylaşır** (çerezler porta göre ayrılmaz), bu yüzden `web` ve `admin` oturumları yerelde birbirine karışır (çözüm adayı: `web.localhost` / `admin.localhost` ana makine adları); tarayıcının `Origin` başlığı Next.js origin'i olduğundan Django'da `DJANGO_CSRF_TRUSTED_ORIGINS` ayarlanmalıdır (`.env.example`'a eklendi; Next.js ile henüz denenmedi); çok sayıda üçüncü taraf paket (tedarik zinciri riski).
 - **Geri dönüş planı:** Henüz kod yok; proxy yerine CORS'a geçmek ADR-013 notu 5'in ayarlarını (django-cors-headers, origin listesi) eklemekten ibarettir.
 
 ## Yeni karar şablonu
